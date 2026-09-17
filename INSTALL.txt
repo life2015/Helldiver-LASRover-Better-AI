@@ -1,0 +1,36 @@
+Rover Fire Spread - Experimental 0.3（本地测试包）
+
+用途：激光漫游车短暂攻击后优先转向近期没打过的可用目标，参考窗口约 0.4 秒。
+单目标继续攻击；不读取燃烧状态，不保证实际点燃或严格照射时间。
+目标列表与本地归属已实机只读验证；启用修改后的转火效果尚未验证。
+
+安装：先关闭 Helldivers 2。
+Arsenal / HD2MM：导入 ZIP、启用并部署。此包包含 Bingus Shared Loader v12 启动桥。
+必须让此包赢得与其他 Wwise 启动脚本的冲突。Arsenal 默认优先级下放最后；
+若启用了首项优先则放最前。已安装的其他 Mod 保留各自游戏模块。
+本地已有自定义启动脚本时，应先合并核对，不能假定全部兼容。
+
+也可手动部署到 data：三个 data 文件必须使用同一个未占用的 patch_N 编号，
+不能覆盖已有文件；手动部署后避免让 Mod 管理器重新部署改变加载顺序。
+本测试包不包含自动安装器，不会主动更改游戏文件。
+
+通过 Steam 启动后，在任务中装备激光漫游车，对多个敌人观察转火。
+运行状态日志：%LOCALAPPDATA%\RoverFireSpread.log
+启动阶段日志：%LOCALAPPDATA%\RoverFireSpread-startup.log
+0.2 在启动桥内直接初始化 Rover，不再依赖自定义模块 require 路径。
+0.3 对启动/任务切换期间暂时缺失的数据返回等待状态，随后自动重试。
+对象身份在采样中变化时丢弃本帧，结构边界错误仍停止，不放宽写入校验。
+必须核对本次启动的日志时间、build_id 和 process_id，不能使用以前遗留的日志。
+mode=experimental，requests 是转火请求次数，rotations 是请求期间观察到的目标变化。
+两者都不能单独证明命中或点燃。出现不射击、频繁抖动等现象应记录后退出以便调整。
+
+卸载：关闭游戏后禁用此包并重新部署；手动安装则只移除本包对应的三个文件。
+若继续使用依赖 Bingus Shared Loader 的其他 Mod，保留/重新启用原版共享加载器。
+
+仅适用于已校验的 Steam build 24826606 / EXE 1.8.45317.0。
+运行时核对 EXE/game.dll 哈希、签名、本地归属和对象身份，仅修改已有可写私有数据。
+不替换行为 ID，不调用原生选敌函数，不修改可执行代码。
+
+来源：CowboyBingus/SentryAimRetention 的 Windows API 适配代码；
+CowboyBingus/BingusSharedLoader v12 发布物中的原版音频回调与共享加载器。
+加载器发布来源与校验值见 provenance.json。仅供本地研究测试，未公开发布。

@@ -1,0 +1,31 @@
+# Generated builds, release packages, deployment records and local captures
+/build/
+/releases/
+/artifacts/
+
+# Python environments and caches
+__pycache__/
+*.py[cod]
+/.venv/
+/venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Compiled Lua, native binaries and game patch archives
+*.luac
+*.ljbc
+*.dll
+*.exe
+*.pdb
+*.patch_*
+
+# Local settings, logs and temporary files
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
