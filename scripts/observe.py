@@ -60,7 +60,7 @@ def main():
 
         lib.lua_pushcclosure(lua.state, read_callback, 0)
         lib.lua_setfield(lua.state, -10002, b'host_read')
-        lua.run('ROOT=' + literal(ROOT.as_posix().encode()) + ';GAME=' + str(base))
+        lua.run('ROOT=' + literal(ROOT.as_posix().encode()) + ';GAME=' + str(base) + ';EXE=' + str(modules['helldivers2.exe'][0]))
         lua.run('''
             local ffi=require('ffi')
             local function load(name)return assert(loadfile(ROOT..'/src/'..name..'.lua'))()end
@@ -71,6 +71,8 @@ def main():
                 end,
                 write=function()error('read-only observer')end}
             local snapshot=load('snapshot')
+            local position=load('position')
+            api.position=function(unit)return position.read(api,EXE,unit)end
             local raw_read=snapshot.read
             snapshot.read=function(...)
                 local s,why=raw_read(...);LAST_SNAPSHOT=s;return s,why
@@ -79,12 +81,16 @@ def main():
             function sample()
                 local ok,why=pcall(CONTROL.poll)
                 if not ok then return 'error\t'..tostring(why)end
-                local s=LAST_SNAPSHOT;local rows={}
+                local s=LAST_SNAPSHOT;local rows={};local distances={}
                 if s then for _,c in ipairs(s.candidates)do
                     rows[#rows+1]=string.format('%d:%d',c.id,c.eligible and 1 or 0)
+                    distances[#distances+1]=string.format('%d:%s',c.id,c.distance2 and string.format('%.3f',math.sqrt(c.distance2)) or 'unknown')
                 end end
                 return table.concat({CONTROL.status or '',CONTROL.id or 0,CONTROL.target or 0,
-                    CONTROL.node or 0,CONTROL.eligible or 0,CONTROL.would_rotate or 0,table.concat(rows,',')},'\t')
+                    CONTROL.node or 0,CONTROL.eligible or 0,CONTROL.would_rotate or 0,table.concat(rows,','),
+                    s and s.distance_available and '1' or '0',table.concat(distances,','),CONTROL.planned_target or 0,
+                    CONTROL.ranking or '',CONTROL.history_count or 0,CONTROL.decision or '',
+                    CONTROL.no_attack_elapsed or 0},'\t')
             end
         ''')
         folder = ROOT.parent / 'research/artifacts'

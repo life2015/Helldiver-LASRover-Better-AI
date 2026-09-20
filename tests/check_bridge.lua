@@ -24,6 +24,7 @@ end
 assert(count>25 and b.CowboyBingusModLoader.api==1)
 local x,y,z=b.update(7);assert(x==7 and y==nil and z==3)
 assert(b.RoverFireSpread and b.RoverFireSpread.mode=='experimental')
+if EXPECT_HUD~=nil then assert(b.RoverFireSpread.hud_enabled==EXPECT_HUD,'compiled HUD variant mismatch')end
 local log=assert(b.logs['mock/RoverFireSpread-startup.log'])
 assert(log:find('bridge_entered') and log:find('shared_loader_returned') and log:find('rover_state='))
 assert(b.logs['mock/RoverFireSpread.log']:find('mode=experimental'))

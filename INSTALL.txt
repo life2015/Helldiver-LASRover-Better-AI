@@ -1,8 +1,24 @@
-Rover Fire Spread - Experimental 0.3（本地测试包）
+Rover Fire Spread - Experimental 0.7.4（本地测试包）
 
-用途：激光漫游车短暂攻击后优先转向近期没打过的可用目标，参考窗口约 0.4 秒。
+每次打包同时提供HUD和No HUD两种ZIP，索敌/转火参数相同，只安装一个版本。
+0.7.4新增同目标1.5秒兜底：短暂切换攻击/瞄准状态不会无限重置进度；有其他有效候选时尝试重选。成功提交请求、换目标或观察失效后重新计时。正常0.4秒攻击转火优先，仍不读取伤害或点燃。
+HUD用于观察和测试；No HUD完全不包含HUD模块，不创建界面、不读取字体或绘制文字，仍保留转火及文本日志。
+No HUD版本的界面说明不适用；成功运行后日志hud_enabled=false、hud_status=disabled。
+切换版本前正常退出游戏，卸载/禁用旧版本，再安装/启用所选版本；不要把两个ZIP当成可叠加的Mod。
+本地脚本：deploy.py install默认HUD，deploy.py install --variant no-hud安装无界面包；卸载均为deploy.py uninstall。
+No HUD并非已确认的崩溃修复，原有实机稳定性问题仍需验证。
+
+用途：激光漫游车短暂攻击后，在近期没处理过的有效目标中优先选离当前目标近的另一个，参考窗口约 0.4 秒。
+0.7：当前目标离漫游车超过15米且15米内（含边界）有其他有效候选时，先限制到近处候选，再避开Recent、按距漫游车排序。
+当前目标已在15米内时按目标间距离排序，不强制下一个目标也在圈内；圈内目标优先规则可以重访Recent。
+最多保留1个近期处理目标；1秒过期，新目标替换旧记录。先利用上一条记录选敌，再记下刚处理的目标。
+重复攻击同一目标刷新时间；全部都在记录里时，先选最久没攻击的，再比较距离。
+当前目标坐标不可用时退回按距漫游车排序，两种距离均不可用时退回原生选敌，日志ranking=native_distance_unavailable；不是确认命中或点燃。
 单目标继续攻击；不读取燃烧状态，不保证实际点燃或严格照射时间。
-目标列表与本地归属已实机只读验证；启用修改后的转火效果尚未验证。
+0.7.4将锁定超时延长：同一目标在节点6/7连续1.5秒未进入同步攻击状态，就排除它并重新请求最近的其他有效目标。
+超时重选暂不避开上一条Recent，优先解除当前卡住的目标。没有其他有效目标时不强制切换。
+计时在攻击开始、目标/身份变化、采样中断时重置；依据攻击节点与目标同步状态，不是真实激光发射或命中检测。
+0.3的转火已在部分场景实测；0.7新排序仍需实机验证。
 
 安装：先关闭 Helldivers 2。
 Arsenal / HD2MM：导入 ZIP、启用并部署。此包包含 Bingus Shared Loader v12 启动桥。
@@ -15,11 +31,28 @@ Arsenal / HD2MM：导入 ZIP、启用并部署。此包包含 Bingus Shared Load
 本测试包不包含自动安装器，不会主动更改游戏文件。
 
 通过 Steam 启动后，在任务中装备激光漫游车，对多个敌人观察转火。
+0.6默认在屏幕顶部居中显示五行ROVER状态面板（英文短标签）：
+绿色 MOD: NEAREST = 最近目标转火请求正在生效。
+0.7.1：绿/黄提示在请求恢复结束后再显示0.5秒，标题加(last)，第二行说明Request ended - native control；新活动请求立即覆盖。此延长仅用于显示，不延长临时修改。
+第二行/Last行的adjacent target表示按与当前目标的距离，near Rover (15m)表示远目标转回15米圈内，nearest Rover表示超时解卡或坐标降级。
+黄色 MOD: NATIVE PICK = Mod保留近期目标筛选，由原生AI在允许目标中挑选。
+灰色 NATIVE = 此刻没有Mod临时干预；下行显示attack window/no other target等原因，不代表Mod停用。
+灰色 WAITING = 等待本地激光狗或游戏数据。红色 STOPPED = 控制器运行后发生错误，已停止干预。
+Last行只显示最近2秒内成功提交的请求及距今时间；Requests/Changes/Recent分别为请求数、请求期间目标变化数、近期记录数。
+面板约10Hz更新，最近请求不等于当前请求，也不证明命中/点燃。
+超时重选显示no attack 1.5s - reselecting，Last行含timeout；Recent上限显示1。
+第五行Locked为行为目标与瞄准目标同步后确认的当前目标ID；Next为正在生效的Mod请求所选目标，尚不代表已锁定。
+没有同步锁定、数据不可用或Mod停止时Locked显示--。Next保留到请求提交满2秒并标注(last)，不是活动锁定；超时、场景/无人机变化或停止后清空。
+距离降级时Next为native，由原生AI决定；结束后为native (last)。Last行提供该请求距今时间。标题颜色保留0.5秒时有(last)，不代表实际干预仍在继续。
+目标ID为当前游戏实体编号，可能复用，并非敌人类型编号或跨局永久ID。
+HUD绘制失败只影响面板；日志hud_status/hud_error说明原因。未加载或初始化失败时不能显示STOPPED，无面板不代表正在走原生逻辑。
+HUD字体布局目前仅用于基线game.dll，其他版本可继续尝试索敌，但HUD会隐藏并记录unverified_font_layout。
 运行状态日志：%LOCALAPPDATA%\RoverFireSpread.log
 启动阶段日志：%LOCALAPPDATA%\RoverFireSpread-startup.log
 0.2 在启动桥内直接初始化 Rover，不再依赖自定义模块 require 路径。
 0.3 对启动/任务切换期间暂时缺失的数据返回等待状态，随后自动重试。
 对象身份在采样中变化时丢弃本帧，结构边界错误仍停止，不放宽写入校验。
+0.4日志增加history_count/history_limit/history_seconds和distance_available/planned_target/planned_distance/ranking。
 必须核对本次启动的日志时间、build_id 和 process_id，不能使用以前遗留的日志。
 mode=experimental，requests 是转火请求次数，rotations 是请求期间观察到的目标变化。
 两者都不能单独证明命中或点燃。出现不射击、频繁抖动等现象应记录后退出以便调整。
@@ -27,8 +60,11 @@ mode=experimental，requests 是转火请求次数，rotations 是请求期间�
 卸载：关闭游戏后禁用此包并重新部署；手动安装则只移除本包对应的三个文件。
 若继续使用依赖 Bingus Shared Loader 的其他 Mod，保留/重新启用原版共享加载器。
 
-仅适用于已校验的 Steam build 24826606 / EXE 1.8.45317.0。
-运行时核对 EXE/game.dll 哈希、签名、本地归属和对象身份，仅修改已有可写私有数据。
+布局基线为 Steam build 24826606 / EXE 1.8.45317.0。
+0.4.1不再因EXE/game.dll整文件哈希变化而拒绝安装或启动；记录实际哈希，尝试运行未验证版本。
+日志compatibility=unverified_build_attempt表示哈希不同，baseline_hash_match表示与基线相同。
+关键代码签名、本地归属、对象身份和结构检查仍必须通过；仅修改已有可写私有数据。
+签名/结构检查通过也不等于已证明新版本兼容。外部只读观察器仍保留独立的严格版本校验。
 不替换行为 ID，不调用原生选敌函数，不修改可执行代码。
 
 来源：CowboyBingus/SentryAimRetention 的 Windows API 适配代码；

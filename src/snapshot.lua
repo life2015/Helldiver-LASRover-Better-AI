@@ -135,6 +135,7 @@ local function read_snapshot(api,game)
     end
     local faction=root(0x276c9c8)
     local faction_root_guard=guards[#guards]
+    local origin=api.position and api.position(u(ent,12)) or nil
     local candidates={}
     local function candidate(off)
         local raw=data:sub(off+1,off+80);local target=u(raw);if target==0 then return end
@@ -150,7 +151,13 @@ local function read_snapshot(api,game)
             identity=read(e,20,true);consistent(u(identity,8)==target)
         end
         local target_guards=scope(target_start,{faction_root_guard})
-        candidates[#candidates+1]={id=target,mask=raw:sub(77,80),address=address,
+        local distance2,position
+        local x,y,z=f(raw,4),f(raw,8),f(raw,12)
+        if x==x and y==y and z==z and math.abs(x)<1000000 and math.abs(y)<1000000 and math.abs(z)<1000000 then
+            position={x,y,z}
+            if origin then distance2=(x-origin[1])^2+(y-origin[2])^2+(z-origin[3])^2 end
+        end
+        candidates[#candidates+1]={id=target,identity=identity,position=position,distance2=distance2,mask=raw:sub(77,80),address=address,
             eligible=identity~=nil and bit.band(flags,1)~=0 and bit.band(mask,allowed_mask)~=0 and score>0,
             valid=function()
                 if not identity then return false end
@@ -175,10 +182,12 @@ local function read_snapshot(api,game)
     local target=u(behavior,24);local node=u(behavior,8)
     return {key=avatar:sub(1,20)..pack:sub(1,20)..ent:sub(1,20),id=id,target=target,node=node,
         synced=target~=0 and u(aim)==target and behavior:byte(121)==1 and bit.band(u(behavior,96),1)~=0,
-        candidates=candidates,now_native=now,deadline=behavior:sub(153,160),deadline_value=deadline,deadline_address=ba+152,
+        candidates=candidates,distance_available=origin~=nil,now_native=now,deadline=behavior:sub(153,160),deadline_value=deadline,deadline_address=ba+152,
         guards=guards,valid=function()return M.matches(api,behavior_guards)end,
         transition={{address=ba,bytes=behavior:sub(1,4)},{address=ba+8,bytes=behavior:sub(9,12)},
-            {address=ba+24,bytes=behavior:sub(25,28)}}},'observing'
+            {address=ba+24,bytes=behavior:sub(25,28)},
+            {address=ba+96,bytes=behavior:sub(97,100)},{address=ba+120,bytes=behavior:sub(121,121)},
+            {address=aim_array+ti*208,bytes=aim:sub(1,4)}}},'observing'
 end
 function M.read(api,game)
     local ok,s,reason=pcall(read_snapshot,api,game)

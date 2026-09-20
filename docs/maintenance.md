@@ -1,24 +1,27 @@
 # 维护、来源与公开发布准备
 
+当前版本0.7.4；更新于2026-09-19。
+
 ## 代码和知识来源
 
 | 来源 | 当前使用方式 | 固定信息 |
 | --- | --- | --- |
-| [SentryAimRetention](https://github.com/CowboyBingus/SentryAimRetention) | Windows FFI 适配思路和代码；直接导入归档编码及资源哈希；借鉴按实例校验/恢复 | 本地 checkout `3582f4f381e70cd6e63a49bac4cc9f90ca061aa7` |
-| [BingusSharedLoader v12](https://github.com/CowboyBingus/BingusSharedLoader/releases/tag/v12) | 实验包内嵌已发布的 Wwise 回调资源，保留音频回调和可选模块加载 | ZIP/resource 哈希见[开发文档](development.md) |
+| [KnowYourConstellation](https://github.com/CowboyBingus/KnowYourConstellation) | 0.5的GUI生命周期、当前语言body字体读取及normal材质配置参考；不依赖安装该Mod | 本地checkout `b3101485354d5d79596399ad9916226e351d54d2`，`src/panel.lua`、`src/presentation.lua` |
+| [SentryAimRetention](https://github.com/CowboyBingus/SentryAimRetention) | Windows FFI适配；0.4的只读unit root pose读取；直接导入归档编码及资源哈希；借鉴按实例校验/恢复 | 本地 checkout `3582f4f381e70cd6e63a49bac4cc9f90ca061aa7` |
+| BingusSharedLoader v12/v14/v15 | v12/v14内置固定发布回调与加载器；v15仅作为独立依赖及离线测试输入，不内置到Rover Addon | 固定来源、输入哈希及包结构见[多渠道说明](packaging-channels.md) |
 | [ControllableHoverPack](https://github.com/CowboyBingus/ControllableHoverPack) | 本地玩家→装备→背包、反向归属及条件恢复的研究参考 | 未把跳跃包管理器直接当成无人机管理器 |
 | [ConsistentVaulting](https://github.com/CowboyBingus/ConsistentVaulting) | 生命周期和临时修改验证方法的参考 | 当前 Rover 不调用其原生函数 |
 | [Filediver 资源名称表](https://github.com/xypwn/filediver/blob/master/hashes/hashes.txt) | 从资源名称推导哈希，再与本机实体对照 | 名称命中本身不证明字段或实体对应 |
 | [Arrowhead PATCH 01.002.101](https://arrowhead.zendesk.com/hc/en-us/articles/18312813272860--PATCH-01-002-101) | 毒气狗施加状态后转向其他目标的历史行为设计参考 | 不用历史说明代替本机版本运行时验证 |
 | 本机加载后的模块及实机观察 | 地址、字段、行为差异和调试证据 | 仅限本文支持版本，原始输入保留本地 |
 
-本地 `BingusSharedLoader` checkout 记录为 `b5f8047fbd1d3f9efab18cd950ffb2533f22484e`，但 Rover 打包输入是**校验过的 v12 发布 ZIP**，不是从这个 checkout 重新构建出的加载器。两种来源身份应分别记录。
+本地 `BingusSharedLoader` checkout 记录为 `b5f8047fbd1d3f9efab18cd950ffb2533f22484e`，但当前六包使用**分别校验过的v12/v14/v15发布ZIP**，不是从这个checkout重新构建出的加载器。两种来源身份应分别记录。
 
 原型、工具及这组文档由用户与 Codex 协作完成。描述来源时保留具体文件、版本和用途，避免把已有社区成果归为本项目原创。
 
 ## 当前不应被误认为已经完成的事
 
-目前是本地实验项目和维护资料，尚未建立完整的独立开源发布流程。未为 Rover 项目选定许可证；检查到的两个上游 `THIRD_PARTY.md` 也写明未选择仓库级许可证。因此不要因为源码可查看或其 LuaJIT 依赖采用 MIT，就给所有复用代码自动标为 MIT。
+本地已配置Git远程`git@github.com:life2015/Helldiver-LASRover-Better-AI.git`；这只说明远程地址存在于配置，不证明本次修改已经推送、仓库可见性或发行完成。当前尚未验证完整的独立开源发布流程。未为 Rover 项目选定许可证；检查到的两个上游 `THIRD_PARTY.md` 也写明未选择仓库级许可证。因此不要因为源码可查看或其 LuaJIT 依赖采用 MIT，就给所有复用代码自动标为 MIT。
 
 后续公开前需要整理各部分来源和使用许可，决定本项目原创部分的许可证，并确认打包材料的分发安排。这份文档记录当前缺口，不替维护者作许可选择。尤其要区分源代码、第三方加载器和其中原游戏音频回调的来源。
 
@@ -30,7 +33,7 @@
 4. **处理观察器数据入口**：公共测试保留合成 fixture，不依赖个人内存快照；保留如何生成本地证据的说明。
 5. **干净环境复现**：从没有 `build/` 和 `releases/` 的目录开始，按开发文档取得固定输入、运行测试和打包。当前没有无游戏安装的完整 CI 路径，因为测试使用游戏自带 Lua DLL。
 
-这些是后续重构建议，本轮仅整理文档，没有暗中替换依赖、设置许可证或改动已安装的0.3。
+这些是后续重构建议，当前0.7.2仍沿用既有目录依赖和未完成的许可整理。0.3的被测发行包保留为回退基线。
 
 ## 源码与本地材料的边界
 
@@ -43,7 +46,7 @@
 - 本机部署记录、个人目录和工具缓存。
 - 下载的加载器 ZIP、生成的 Lua 字节码和游戏资源归档。
 
-源码发布与预编译 Mod 发布是两项不同的交付。当前 package report 标明 `local_private_build=true`；文档写全并不自动改变这一状态。
+源码发布与预编译 Mod 发布是两项不同的交付。基础/v14报告沿用`local_private_build=true`，v15报告结构不同，不保证存在该字段；不能从字段缺失推断已经公开发行。文档写全不替代发布与许可核对。
 
 ## 维护变更的验收方式
 
@@ -58,9 +61,11 @@
 可以复制下列字段，公开提交前去掉个人路径和不必要的内存内容：
 
 ```text
-Mod版本 / ZIP SHA256：
+完整ZIP名 / Mod版本 / ZIP SHA256：
+加载器渠道及版本 / HUD或No HUD：
 游戏build / EXE版本：
-安装方式及相关启动Mod：
+安装方式、其他Mod清单及启动资源覆盖顺序：
+若崩溃：准确时间 / 游戏退出、蓝屏或整机无响应 / GPU及驱动：
 场景：飞船 / 单目标 / 多目标 / 密集目标 / 切换任务 / 其他
 敌人类型、主机或客户端（若已知）：
 预期行为：
@@ -76,3 +81,9 @@ status及samples/requests/rotations两个时间点：
 ## 交接时应保留
 
 交接源码和本目录；额外在本地保存最后成功包及校验报告、部署记录、对应实测摘要、未解决问题。明确“当前包可回退”和“下一项假设待验证”，让接手人不必重新跑全部历史实验，也不会误用已经被新证据否定的结论。
+
+## 六包分发维护
+
+以`build/package-matrix.json`列出的六包为本次输出，逐项核对ZIP哈希；不要把releases目录的历史旧名包、回退包一起当作最新版。HUD/No HUD每渠道二选一，全部Rover渠道同GUID互斥。包内说明是构建时快照，文档改动后按需要重新打包再记录新哈希，不修改已保存的实测身份。
+
+发布说明应明确v12/v14内置加载器、v15额外依赖官方加载器，并链接当前玩家指南。证明新增渠道“能到达入口”的离线测试不能替代玩家实际加载日志及其他Mod功能验收。具体待测项目见[验证矩阵](validation.md)。

@@ -1,122 +1,126 @@
 # 开发与构建
 
-## 当前工作区要求
+当前版本0.7.4；更新于2026-09-19。默认打包一次生成v12/v14/v15 × HUD/No HUD六包，不部署也不启动游戏。
 
-构建工具使用 Windows x64 Python 和本机游戏的 `bin/lua51.dll`，仅用 Python 标准库。原开发环境使用 Python 3.12。不要用无法加载 Windows DLL 的 Linux Python 来运行这些脚本。
+## 环境和目录依赖
 
-当前目录布局必须保留：
+使用Windows x64 Python及游戏自带`bin/lua51.dll`，Python部分仅依赖标准库。原开发环境为Python 3.12。Linux Python无法加载这些Windows DLL。
 
 ```text
 workspace/
   RoverFireSpread/
     src/ scripts/ tests/ docs/
-    build/                  # 本地输入和生成物，忽略提交
-    releases/               # 生成的实验包，忽略提交
+    build/                         # 固定输入、生成报告、本机部署记录
+    releases/                      # 生成ZIP
   SentryAimRetention/
-    scripts/archive.py      # package.py 直接导入
+    scripts/archive.py             # 打包直接导入
   research/
-    observe_rover.py         # observe.py 直接导入 Reader 及版本常量
-    artifacts/              # 只读采样输出，忽略提交
+    observe_rover.py                # 外部观察器直接导入Reader和版本常量
+    artifacts/                     # 本地研究证据
 ```
 
-仅复制 `RoverFireSpread` 时，测试和字节码编译可在满足 Lua DLL 条件后运行，但打包缺少 `archive.py`，外部采样缺少 `observe_rover.py`。它们不是 pip 包。独立仓库整理是后续工作，不能用一次本机成功构建代替干净环境复现。
+只复制本仓库可以在满足Lua DLL条件后测试/编译，但打包还需要同级`archive.py`，外部采样还需要`observe_rover.py`。SentryAimRetention固定研究checkout为`3582f4f381e70cd6e63a49bac4cc9f90ca061aa7`，来源`https://github.com/CowboyBingus/SentryAimRetention.git`；无需编译或安装整个哨戒炮Mod。
 
-`SentryAimRetention` 的原开发 checkout 为提交 `3582f4f381e70cd6e63a49bac4cc9f90ca061aa7`，远程地址是 `https://github.com/CowboyBingus/SentryAimRetention.git`。构建仅从其中导入归档编码与资源哈希逻辑；不需要编译或安装整个哨戒炮 Mod。
+`package.py`将归档依赖路径插在本项目脚本路径之后。不要改为优先导入依赖目录，否则其中同名`package.py`可能遮蔽本项目的多渠道构建模块。
 
-## 配置 Python 和游戏目录
+## 配置运行环境
 
-下列命令均在 `RoverFireSpread` 根目录的 PowerShell 中执行。`$pythonExe` 应是已安装的 64 位 Python；若 `python` 指向 Windows Store 占位程序，改成真实可执行文件路径。
+在RoverFireSpread根目录的PowerShell中执行。`$pythonExe`使用真实的64位Python，若`python`指向Windows Store占位程序则替换它。
 
 ```powershell
 $pythonExe = 'python'
-& $pythonExe -c "import sys, struct; print(sys.version); print('pointer bits:', struct.calcsize('P') * 8)"
+$env:PYTHONIOENCODING = 'utf-8'
 $env:HD2_GAME_ROOT = 'C:\Program Files (x86)\Steam\steamapps\common\Helldivers 2'
+& $pythonExe -c "import sys, struct; print(sys.version); print('pointer bits:', struct.calcsize('P') * 8)"
 Test-Path -LiteralPath (Join-Path $env:HD2_GAME_ROOT 'bin\lua51.dll')
 ```
 
-`HD2_GAME_ROOT` 是可选项，默认即上述目录。不要把个人 Python 缓存路径提交为公共默认值。
+`HD2_GAME_ROOT`可省略，默认即上述目录。不要把个人缓存路径写成公共默认值。
 
-[`scripts/lua_host.py`](../scripts/lua_host.py) 通过 `ctypes.CDLL` 把游戏自带的 Lua DLL 加载到**构建 Python 进程**，创建独立 Lua state，使用 `string.dump` 生成 stripped bytecode。它不向游戏进程注入 DLL。要求非 GC64 模式，输出头须为 `1b 4c 4a 02 02`；不要任意换用系统 Lua/LuaJIT 编译器。
+[`scripts/lua_host.py`](../scripts/lua_host.py)通过ctypes在构建Python进程创建独立Lua state，用游戏LuaJIT的`string.dump`生成stripped bytecode；不是向游戏进程注入DLL。要求非GC64模式，输出头为`1b 4c 4a 02 02`，不要随意替换为系统Lua编译器。
 
-## 准备固定的共享加载器输入
+## 准备三个固定加载器输入
 
-`package.py` 不自动下载依赖。它要求 `build/Bingus-Shared-Loader-v12.zip`，而不是“最新版”。原始下载来源及校验：
+打包脚本不自动下载。先分别取得官方[v12](https://github.com/CowboyBingus/BingusSharedLoader/releases/tag/v12)、[v14](https://github.com/CowboyBingus/BingusSharedLoader/releases/tag/v14)、[v15](https://github.com/CowboyBingus/BingusSharedLoader/releases/tag/v15)的ZIP，保留发布文件名放入build/。完整输入SHA-256见[多渠道说明](packaging-channels.md)。
 
 ```powershell
 New-Item -ItemType Directory -Path build -Force | Out-Null
-$loaderZip = Join-Path (Get-Location) 'build\Bingus-Shared-Loader-v12.zip'
-if (-not (Test-Path -LiteralPath $loaderZip)) {
-    Invoke-WebRequest -Uri 'https://github.com/CowboyBingus/BingusSharedLoader/releases/download/v12/Bingus-Shared-Loader-v12.zip' -OutFile $loaderZip
-}
-$expectedLoaderHash = '4A95D7A056F0A9E01842420883059A380374092145B5D9EC807C14C8CA351568'
-if ((Get-FileHash -LiteralPath $loaderZip -Algorithm SHA256).Hash -ne $expectedLoaderHash) {
-    throw 'Shared Loader input checksum mismatch'
+foreach ($loaderVersion in @('v12', 'v14', 'v15')) {
+    $loaderPath = Join-Path (Get-Location) "build\Bingus-Shared-Loader-$loaderVersion.zip"
+    if (-not (Test-Path -LiteralPath $loaderPath)) { throw "Missing input: $loaderPath" }
+    Get-FileHash -LiteralPath $loaderPath -Algorithm SHA256
 }
 ```
 
-提取的完整 Wwise Lua resource（含 8 字节资源头）SHA-256 应为 `D07ED04A7F68D588F424D155AFD8F08B1BFC4D946C90FBC5BBBDCADE1EB69123`。`package.py` 同时检查 ZIP 和 resource 的哈希，失败时应检查输入，不应删除断言。
+`package.py`在开始六包构建前检查三个ZIP的固定哈希，并校验v12/v14回调资源。输入不匹配时应找回正确发布物，不删除断言或静默替换为最新版。v15输入用于离线集成测试，不会内置到Rover的v15包。
 
-## 测试、编译、打包
+## 测试和打包
 
-按顺序执行，每步成功后再继续：
+按顺序执行，每一步成功后再继续：
 
 ```powershell
 & $pythonExe scripts/test.py
-if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
-
+if ($LASTEXITCODE -ne 0) { throw 'Lua tests failed' }
+& $pythonExe tests/test_deploy.py
+if ($LASTEXITCODE -ne 0) { throw 'Deployment tests failed' }
 & $pythonExe scripts/build.py
 if ($LASTEXITCODE -ne 0) { throw 'Diagnostic compilation failed' }
-
 & $pythonExe scripts/package.py
 if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
 ```
 
-各脚本作用不同：
+| 命令 | 作用 |
+| --- | --- |
+| `test.py` | 每个`test_*.lua`使用独立Lua state；当前127项：核心66、生命周期13、HUD25、位置6、快照17 |
+| `tests/test_deploy.py` | 5项临时模拟目录测试，验证部署校验、No HUD选择及卸载后切换，不接触真实安装 |
+| `build.py` | 默认生成禁止写入的诊断入口和报告 |
+| `build.py --experimental [--no-hud]` | 单独编译实验本体，不生成完整安装ZIP |
+| `package.py` | 重新编译两个实验本体，包装六包，运行启动/归档验证，生成矩阵索引 |
+| `package_v14.py` / `package_v15.py` | 各生成两个变体，要求当前v12基础ZIP及报告名称/哈希匹配；不自动重新编译基础包 |
 
-| 命令 | 结果 | 会安装吗 |
+`package.py`不代跑全部Lua或部署测试。源码修改后单独运行相关测试，正式构建前执行上述流程；文档修改只需核对内容和链接，不需要重新部署。
+
+`compile_entry(enabled, show_hud)`控制运行模式及是否编入HUD。No HUD从源码列表移除hud，传入`hud=nil`和`show_hud=false`，不创建GUI、不读取字体或绘图，控制器和文本日志照常。HUD和No HUD共有源码及target_policy由构建断言核对。
+
+## 两种启动链与包结构
+
+| 渠道 | ZIP资源目录 | Lua资源及入口 |
 | --- | --- | --- |
-| `test.py` | 执行 `tests/test_*.lua`，每文件独立 Lua state | 不会 |
-| `build.py` | 默认生成禁止写入的诊断 Lua/字节码及 `build-report.json` | 不会 |
-| `build.py --experimental` | 单独生成开启控制器写入的入口字节码 | 不会 |
-| `package.py` | 重新编译实验入口、构建启动桥、跑桥接检查、生成 ZIP 和 package report | 不会 |
+| v12/v14 | `data/` | Rover本体资源与Wwise回调桥；桥保留对应官方加载器，再直接执行内嵌Rover编译入口 |
+| v15 | `Addon/` | 纯文本`mods/retrox/rover_fire_spread`声明入口及编译后的`mods/retrox/rover_fire_spread_impl`；由独立官方v15发现并require |
 
-`package.py` **不会代跑全部 `test_*.lua`**，所以发布前必须单独跑 `test.py`。单独编译后的 `.luac` 不是可以直接丢进游戏目录的 Mod。
+各包资源目录中均有`9ba626afa44a3aa3.patch_0`及空的`.stream`、`.gpu_resources`；另外附manifest.json、provenance.json和INSTALL.txt。两种HUD变体分别编译，同一变体在三个渠道的本体逐字节相同。所有包共用GUID `209a1d35-17ef-4c55-a163-616bf8f31861`，不能同时安装。
 
-0.3 的独立测试共 41 项：核心控制/恢复 21、入口生命周期 6、快照布局 14。打包时另执行 `tests/check_bridge.lua`，验证实际编译入口执行、原音频回调保持、阶段日志和重复初始化保护，再做资源往返及 ZIP 完整性检查。
+v15声明必须是纯文本且首行为`-- HD2-Addon: mods/retrox/rover_fire_spread`；不要strip/编译该入口。实现资源仍为字节码。构建检查不包含Wwise或boot，与固定官方v15没有Lua资源交集。
 
-桥接测试运行在没有 `game.dll` 的独立进程，预期 Rover 报告版本/模块校验失败；它证明入口被执行，不是模拟了整场游戏。测试中的文件写入必须隔离，见[历史教训](debugging.md)。
+归档编码来自同级`archive.py`：magic `0xF0000011`、Lua type `0xA14E8DFA2CD117E2`；头72字节、type entry 32字节、resource entry 80字节，主体按16字节对齐。Lua资源由`<uint32 size, uint32 version=2>`及正文组成；正文可以是本项目v15声明文本或相应编译字节码。路径使用64位资源哈希，不是Python内建hash()。
 
-## 包内结构及启动链
+## 启动测试的边界
 
-生成 ZIP 的主要文件：
+v12/v14分别执行实际编译桥，验证原音频回调、Rover入口及HUD配置、重复初始化；v14还检查固定模块名单、失败隔离及已有协调器。v15使用实际官方发布字节码和Win32文件枚举扫描临时归档，对两个变体分别验证加载器高编号、Addon高编号、缺失实现、无Addon。
 
-```text
-data/9ba626afa44a3aa3.patch_0
-data/9ba626afa44a3aa3.patch_0.stream
-data/9ba626afa44a3aa3.patch_0.gpu_resources
-manifest.json
-provenance.json
-INSTALL.txt
-```
+这些测试在没有game.dll的独立构建进程内运行；Rover初始化受控失败是预期，不表示游戏内控制器已运行。其他Mod及引擎资源查询为模拟。另有归档往返、ZIP完整性、本体一致性检查，均不能替代实机共存或整机稳定性验证。
 
-两个 sidecar 为空。主归档包含 `mods/retrox/rover_fire_spread` 和 `core/wwise/lua/wwise_flow_callbacks` 两个 Lua resource。0.3 启动桥直接内嵌执行实验入口，不依赖新模块的 `require` 路径；独立模块资源仍保留，初始化全局 guard 防止重复执行。
+## 文件名、报告与复现
 
-编码取自 `SentryAimRetention/scripts/archive.py`：magic `0xF0000011`，Lua type `0xA14E8DFA2CD117E2`；归档头 72 字节，type entry 32 字节，resource entry 80 字节，主体按 16 字节对齐。Lua resource 是 `<uint32 bytecode_size, uint32 version=2>` 后接字节码。文件名来自资源路径的 64 位哈希；不要用 Python 内建 `hash()` 替代。
+ZIP统一为`激光狗索敌优化-0.7.4-渠道-加载器说明[-No-HUD].zip`。v12/v14说明为“内置加载器”，v15为“需要额外安装加载器”；manifest显示名也标注。名称集中在`package.py`的`PACKAGE_NAME`及`package_name()`，完整清单见[多渠道说明](packaging-channels.md)。
 
-## 构建报告与复现
+| 文件 | 用途 |
+| --- | --- |
+| `build/build-report.json` / `build-report-no-hud.json` | 最近一次对应本体编译结果；诊断与实验共用报告名，注意mode和刷新时间 |
+| `build/experimental-package-report.json` / `experimental-package-report-no-hud.json` | v12 HUD/No HUD包身份及默认部署输入 |
+| `build/v14-compat/{hud,no-hud}/package-report.json` | v14渠道报告 |
+| `build/v15-addon/{hud,no-hud}/package-report.json` | v15渠道报告 |
+| `build/package-matrix.json` | 本次成功构建的六包名及SHA-256；分发从这里选，不按目录里所有ZIP批量发送 |
+| 包内`provenance.json` | 打包时的来源和验证信息，不会随之后实测自动改变 |
+| `build/deployment.json` | 本机实际安装/移除记录，与构建报告分开；不能当作可清理生成物 |
 
-`build/experimental-package-report.json` 保存来源校验、源码摘要、启动测试、归档和 ZIP 哈希。`provenance.json` 是打包时刻的报告；它不会因为后来一次实机成功而自动改变。
+报告模式有渠道差异：基础包是`sources`，派生渠道以`core_sources`记录本体来源；v15明确`bundled_loader=false`。不要假定所有渠道具有完全相同的报告字段。
 
-已实测安装的 0.3 ZIP SHA-256 是：
+ZIP条目时间固定，但不承诺跨Python/zlib版本逐字节一致；文档或manifest更新也会改变ZIP哈希。已经分发/实测的包应保留原ZIP和匹配报告，用独立验证记录追加结论。文档更新不会自动更新已有ZIP内的说明，下次打包才嵌入新内容。
 
-```text
-9B59A01521D14C91262CA13DA4F97814108EB9FBBAD8B79DD4C76C35D061D3F1
-```
+## 发下一版前
 
-这是历史被测包的身份，不是要求任何未来重新构建都必须得到此值。脚本固定了 ZIP 条目时间，但未承诺跨 Python/zlib 版本逐字节一致。源码或 `INSTALL.txt` 变更也会产生新包。不要为刷新文档或实测标记直接覆盖被测包而丢失证据。
+运行版本仍分散在`src/install.lua`、`src/startup.lua`和`scripts/package.py`；核对日志版本、桥接测试预期、manifest、README、INSTALL.txt和文档。游戏哈希及签名的定义和适配步骤见[运行时布局](runtime-layout.md)。
 
-## 发下一版时容易漏掉的地方
-
-0.3 的版本号尚未集中管理，至少核对 `src/install.lua`、`src/startup.lua`、`scripts/package.py` 中的显示版本/入口名/ZIP 名，以及 `INSTALL.txt`、README、验证记录。哈希、签名与支持版本的多处定义见[布局文档](runtime-layout.md)。
-
-针对源码改动先跑对应测试；打包前跑全部 41 项及桥接检查。改变策略时补有区分能力的边界场景，例如大量目标、单目标、节点切换或请求失败，不只复制实现写断言。只有文档改动时，检查链接、命令、常量与现有报告即可，无须重新部署游戏。
+按变更补充有区分能力的边界测试，特别是节点切换、目标身份复用、写入失败和恢复。最后生成六包并核对矩阵，保留来源和实测证据。干净环境构建及无游戏DLL的CI仍未完成，详见[维护说明](maintenance.md)。

@@ -6,12 +6,14 @@ local function test(name,fn)fn();passed=passed+1;print('PASS '..name)end
 local function fixture(original,options)
     options=options or {};RoverFireSpread=nil;update=original;shutdown=function()return 'old shutdown'end
     local polls,stops=0,0
-    local api={time=function()return 0 end,module=function(name)return name or 'exe'end,module_hash=function()return 'hash'end}
+    local api={time=function()return 0 end,module=function(name)return name and 100 or 200 end,
+        module_hash=function(module)return module==100 and (options.game_actual or 'hash') or (options.exe_actual or 'hash')end,
+        read=function()return options.signature_actual end}
     local oldopen=io.open;io.open=function()return nil end
     install(function()return api end,nil,nil,nil,function()
         return {status='observing',poll=function()polls=polls+1;if options.fail then error('poll error')end;return true end,
             stop=function()stops=stops+1;return true end}
-    end,{enabled=false,game_sha=options.hash or 'hash',exe_sha='hash',signatures={}})
+    end,{enabled=false,game_sha='hash',exe_sha='hash',signatures=options.signatures or {},show_hud=options.show_hud},options.hud)
     io.open=oldopen
     return api,function()return polls,stops end
 end
@@ -30,13 +32,47 @@ test('original update errors propagate after cleanup',function()
     local _,counts=fixture(function()error('original error')end)
     local ok,why=pcall(update);local _,stops=counts();assert(not ok and why:find('original error') and stops==1)
 end)
-test('unsupported game never wraps update',function()
-    local original=function()return 'untouched'end;fixture(original,{hash='wrong'})
-    assert(update==original and RoverFireSpread.status:find('Unsupported'))
+test('changed game hash attempts initialization and records actual hashes',function()
+    local original=function()return 'running'end;local _,counts=fixture(original,{game_actual='new_game',signatures={{0,'aa'}},signature_actual='\xaa'})
+    assert(update~=original and update()=='running' and counts()>0)
+    assert(RoverFireSpread.compatibility=='unverified_build_attempt' and RoverFireSpread.game_sha256=='new_game')
+end)
+test('changed executable hash also allows an unverified attempt',function()
+    local original=function()end;fixture(original,{exe_actual='new_exe'})
+    assert(update~=original and RoverFireSpread.compatibility=='unverified_build_attempt' and RoverFireSpread.exe_sha256=='new_exe')
+end)
+test('matching hashes identify the baseline without claiming gameplay success',function()
+    fixture(function()end)
+    assert(RoverFireSpread.compatibility=='baseline_hash_match' and RoverFireSpread.status=='waiting_for_mission')
+end)
+test('signature mismatch still prevents initialization on an unverified build',function()
+    local original=function()end;fixture(original,{game_actual='new_game',signatures={{0,'aa'}},signature_actual='\xbb'})
+    assert(update==original and RoverFireSpread.status:find('Runtime signature mismatch'))
+end)
+test('unreadable signature still prevents initialization on the baseline',function()
+    local original=function()end;fixture(original,{signatures={{0,'aa'}}})
+    assert(update==original and RoverFireSpread.status:find('Runtime signature mismatch'))
 end)
 test('shutdown restores then preserves previous callback',function()
     local _,counts=fixture(function()end);assert(shutdown()=='old shutdown')
     local _,stops=counts();assert(stops==1)
+end)
+test('HUD exceptions do not stop targeting or alter callback return values',function()
+    local _,counts=fixture(function()return 7,nil,9 end,{hud={new=function()return {frame=function()error('draw failed')end}end}})
+    local a,b,c=update();local polls,stops=counts()
+    assert(a==7 and b==nil and c==9 and polls==2 and stops==0)
+    assert(RoverFireSpread.hud_status=='unavailable' and not RoverFireSpread.stopped)
+end)
+test('HUD survives controller failure to show stopped and clears at shutdown',function()
+    local seen,cleared=false,false
+    fixture(function()end,{fail=true,hud={new=function()return {
+        frame=function(_,state)seen=state.stopped end,clear=function()cleared=true end}end}})
+    update();assert(seen);shutdown();assert(cleared)
+end)
+test('HUD can be disabled without changing the update chain',function()
+    local _,counts=fixture(function()return 'ok'end,{show_hud=false,hud={new=function()error('must not create')end}})
+    assert(update()=='ok' and RoverFireSpread.hud_status=='disabled')
+    assert(counts()>0 and RoverFireSpread.hud_enabled==false)
 end)
 io=real_io
 return tostring(passed)..' installation tests passed'
