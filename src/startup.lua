@@ -6,7 +6,7 @@ return function(run_shared,run_rover)
         pcall(function()
             local dir=os.getenv('LOCALAPPDATA');if not dir then return end
             local f=io.open(dir..'/RoverFireSpread-startup.log','w');if not f then return end
-            f:write('build_id=experimental-0.7.4\n'..table.concat(stages,'\n')..'\n');f:close()
+            f:write('build_id=experimental-0.7.10\n'..table.concat(stages,'\n')..'\n');f:close()
         end)
     end
     report('bridge_entered')

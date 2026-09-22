@@ -8,7 +8,7 @@ from test import ROOT, GAME
 
 
 def compile_entry(enabled=False, show_hud=True):
-    names = ['windows_api', 'position', 'snapshot', 'policy', 'lease', 'controller', 'hud', 'install']
+    names = ['layout', 'windows_api', 'position', 'markers', 'snapshot', 'policy', 'lease', 'controller', 'hud', 'install']
     if not show_hud:
         names.remove('hud')
     parts = ['-- Private prototype; gameplay effect still requires in-game testing.']
@@ -19,9 +19,11 @@ def compile_entry(enabled=False, show_hud=True):
     parts.append('''local function create_api()
         local api=windows_api();local exe=api.module(nil)
         api.position=function(unit)return position.read(api,exe,unit)end
+        api.markers=function(game,owner,candidates)return markers.read(api,game,owner,candidates)end
         return api
     end
     install(create_api,snapshot,policy,lease,controller,{
+        layouts=layout.profiles,
         enabled=false,
         show_hud=true,
         game_sha='CC75948D90FDFDE259DCB519E9933DB7FFA3CCB281CE4FB89E6B1B011557470C',
@@ -46,6 +48,7 @@ def compile_entry(enabled=False, show_hud=True):
     report = {'mode': mode, 'installable': False, 'gameplay_validated': False,
               'variant': 'hud' if show_hud else 'no-hud', 'hud_enabled': show_hud,
               'bytecode_sha256': hashlib.sha256(code).hexdigest(),
+              'supported_layout_ids': ['24826606','25327279'],
               'lua_dll_sha256': hashlib.sha256((GAME / 'bin/lua51.dll').read_bytes()).hexdigest(),
               'sources': {name: hashlib.sha256((ROOT / 'src' / (name + '.lua')).read_bytes()).hexdigest() for name in names}}
     (folder / ('build-report'+suffix+'.json')).write_text(json.dumps(report, indent=2), encoding='utf-8')

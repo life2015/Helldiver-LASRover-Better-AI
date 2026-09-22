@@ -17,12 +17,13 @@ local function map(a,id,index)
     ptr(a,data);word(a+8,8);word(a+12,0xffffffff);word(a+16,1)
     word(data+(id%8)*8,id);word(data+(id%8)*8+4,index)
 end
-local game=alloc(0x2770000)
-local function manager(rva,n)local a=alloc(n or 65536);ptr(game+rva,a);return a end
+local layout=SNAPSHOT_LAYOUT or {}
+local game=alloc(SNAPSHOT_LAYOUT and 0x3470000 or 0x2770000)
+local function manager(rva,n)local a=alloc(n or 65536);ptr(game+((layout.roots or {})[rva] or rva),a);return a end
 local mode=manager(0x276c3d0);word(mode+8,1);word(mode+0x40,1)
 local player=manager(0x276c190);word(player+0x84,1);word(player+0x88,1);word(player+0x3a8,11)
-local owner=manager(0x276f0c0,0xf40000);map(owner+0xf21a88,11,0)
-local avatar=owner+0xf31ad8;entity(avatar,'4d1c334d294dfa97',101,11)
+local owner=manager(0x276f0c0,0xf40000);map(owner+(layout.owner_map or 0xf21a88),11,0)
+local avatar=owner+(layout.owner_entities or 0xf31ad8);entity(avatar,'4d1c334d294dfa97',101,11)
 local eq=manager(0x276c468);map(eq+40,101,0)
 local eqa=alloc(8);ptr(eq+64,eqa);ptr(eqa,avatar)
 local eqr=alloc(48);ptr(eq+80,eqr);word(eqr+12,102)
@@ -35,9 +36,11 @@ local drone=alloc(24);entity(drone,'5beec97f4c7f4ae9',103,13)
 local targeting=manager(0x276ca40);word(targeting+308,1);word(targeting+320,1);word(targeting+324,1)
 map(targeting+336,103,0)
 local ta,aim=alloc(8),alloc(208);ptr(targeting+360,ta);ptr(ta,drone);ptr(targeting+376,aim);word(aim,201)
-local behavior=manager(0x276c470);word(behavior+32,1);map(behavior+64,103,0)
-local be,br=alloc(8),alloc(496);ptr(behavior+88,be);ptr(be,drone);ptr(behavior+96,br)
-word(br,189);word(br+8,7);word(br+24,201);word(br+96,1);word(br+104,103);word(br+120,1);ptr(br+152,1000010)
+local behavior=manager(0x276c470);word(behavior+32,2);map(behavior+64,103,1)
+local stride=layout.behavior_stride or 496
+local be,records=alloc(16),alloc(stride*2);local br=records+stride
+ptr(behavior+88,be);ptr(be+8,drone);ptr(behavior+96,records)
+word(br,layout.behavior_id or 189);word(br+8,7);word(br+24,201);word(br+96,1);word(br+104,103);word(br+120,1);ptr(br+152,1000010)
 local perception=manager(0x276c270);map(perception+48,103,0)
 local pe,pr=alloc(8),alloc(0x13f8);ptr(perception+72,pe);ptr(pe,drone);ptr(perception+80,pr)
 word(pr,1);word(pr+8,2);word(pr+0x310,2)
@@ -52,7 +55,7 @@ word(tonumber(fmap[0])+(202%8)*8,202);word(tonumber(fmap[0])+(202%8)*8+4,1)
 local fa,enemy1,enemy2=alloc(16),alloc(24),alloc(24)
 ptr(faction+73832,fa);ptr(fa,enemy1);ptr(fa+8,enemy2)
 entity(enemy1,'0000000000000001',201,21);entity(enemy2,'0000000000000001',202,22)
-local api={read=function(a,n)
+local api={layout=SNAPSHOT_LAYOUT,read=function(a,n)
     for _,b in ipairs(blocks)do
         local start=tonumber(ffi.cast('uintptr_t',b[1]))
         if a>=start and a+n<=start+b[2] then return ffi.string(ffi.cast('void *',a),n)end
@@ -82,6 +85,12 @@ test('unavailable drone position preserves native eligibility without a guessed 
     assert(s.candidates[1].position[1]==0)
     api.position=nil
 end)
+test('wrong behavior ID is rejected for the selected layout',function()
+    word(br,layout.behavior_id and 189 or 190)
+    local ok,why=pcall(S.read,api,game);assert(not ok and tostring(why):find('unsupported drone behavior'))
+    word(br,layout.behavior_id or 189)
+end)
+
 test('gas backpack is rejected',function()
     hash(backpack,'bffcb4cd971a8eda');local s,why=S.read(api,game);assert(not s and why=='not_laser_backpack')
     hash(backpack,'af9b683ccb6ddc02')
@@ -117,9 +126,9 @@ test('equipment changes do not abandon existing drone data restoration',function
     word(eqr,0)
 end)
 test('missing startup manager waits and recovers when the manager appears',function()
-    ptr(game+0x276c3d0,0)
+    ptr(game+((layout.roots or {})[0x276c3d0] or 0x276c3d0),0)
     local s,why=S.read(api,game);assert(not s and why=='waiting_for_runtime')
-    ptr(game+0x276c3d0,mode);assert(S.read(api,game).id==103)
+    ptr(game+((layout.roots or {})[0x276c3d0] or 0x276c3d0),mode);assert(S.read(api,game).id==103)
 end)
 test('temporary unreadable memory waits and recovers',function()
     local original=api.read;api.read=function()return nil end
@@ -137,6 +146,13 @@ test('attack entry or synchronization changes invalidate a stale timeout snapsho
     s=S.read(api,game);word(aim,202);assert(S.matches(api,s.transition)==false);word(aim,201)
     s=S.read(api,game);word(br+120,0);assert(S.matches(api,s.transition)==false);word(br+120,1)
     s=S.read(api,game);word(br+96,0);assert(S.matches(api,s.transition)==false);word(br+96,1)
+end)
+test('snapshot passes verified local owner and candidate identities to optional marker reader',function()
+    api.markers=function(base,owner,candidates)
+        assert(base==game and owner==101 and candidates[2].id==202 and candidates[2].identity)
+        return {id=202,identity=candidates[2].identity},'eligible'
+    end
+    local s=S.read(api,game);assert(s.marked.id==202 and s.marker_status=='eligible');api.markers=nil
 end)
 test('mission exit yields a waiting state',function()
     word(mode+0x40,0);local s,why=S.read(api,game);assert(not s and why=='waiting_for_mission')

@@ -1,6 +1,6 @@
 # 调试手册
 
-当前实现0.7.4；更新于2026-09-19。加载器渠道、HUD变体和游戏进程需同时确认。
+当前实现0.7.6；更新于2026-09-19。加载器渠道、HUD变体和游戏进程需同时确认。
 
 ## 先确定正在看哪一次运行
 
@@ -19,6 +19,7 @@ Rover主日志不是逐事件追加记录。连续观察两个时间点和计数
 
 | 字段 | 含义和注意事项 |
 | --- | --- |
+| `layout_id` | 24826606为旧布局；25327279为新模块哈希对匹配的显式布局。新布局匹配时compatibility为verified_layout_hash_match，仍须通过其关键签名 |
 | `build_id` / `mode` / `process_id` | 对应版本、实验或诊断模式、游戏进程身份 |
 | `hud_enabled` / `hud_status` / `hud_error` | No HUD成功运行应为false/disabled；HUD面板状态见[面板说明](hud.md)。`visible`表示绘制调用完成，不代表实机已确认可见 |
 | `decision` / `active_request` / `active_ranking` | 当前轮询的决策原因、临时请求是否仍在生效及其排序模式 |
@@ -37,7 +38,7 @@ Rover主日志不是逐事件追加记录。连续观察两个时间点和计数
 | `history_count` / `history_limit` / `history_seconds` | 0.6近期记录数、上限1、有效期1秒；记录数不应超过1。旧0.4/0.5版本为8项/4秒 |
 | `distance_available` | 本次快照无人机位置可读；不保证每个候选坐标都有效 |
 | `planned_target` / `planned_distance` | 本次计划目标及所用距离（米）；`previous_target`时为目标间距离，其余距离排序为距漫游车。不是请求成功或命中证明 |
-| `selection_basis` / `active_basis` / `last_request_basis` | 计划/活动/最近成功请求的距离依据：`previous_target`相邻敌人、`near_rover`远目标转回15米内、`rover_fallback`当前目标坐标不可用、`timeout_rover`超时解卡、`native`两种距离均不可用。计划和活动字段会清空，短请求优先查看last字段 |
+| `selection_basis` / `active_basis` / `last_request_basis` | 计划/活动/最近成功请求的距离依据：`previous_target`相邻敌人、`near_rover`远目标转回30米内、`rover_fallback`当前目标坐标不可用、`timeout_rover`超时解卡、`native`两种距离均不可用。计划和活动字段会清空，短请求优先查看last字段 |
 | `ranking` | `nearest`表示计划用了距离排序；`native_distance_unavailable`表示候选池无可用距离，退回原生选择 |
 
 快照不可用时部分字段可能仍保留上次值，不能脱离 `status` 判断。计数跨任务累计；新任务或新无人机应看增量和 ID 变化，不期待计数归零。待恢复分支提前返回时，日志显示的目标也可能稍落后于外部读到的即时目标。
@@ -78,7 +79,7 @@ HUD绿/黄标题带(last)已经结束请求，只保留0.5秒供观察；Next的
 
 ## 有其他活敌但持续锁住同一目标
 
-先区分请求未产生与请求后未切换：比较同一target的requests/rotations增量、decision和node/synced时间序列。中甲挡伤害不直接阻止策略计时，因为没有命中或伤害读取；已发现状态短暂交替时两种计时互相清零的盲区，详见[盾虫锁定调查及复现](hive-guard-lock-investigation.md)。0.7.4已增加独立计时并通过交替状态回归，但未确认是反馈现场的唯一原因。主日志2秒刷新不足以排除这种短周期切换。
+先区分请求未产生与请求后未切换：比较同一target的requests/rotations增量、decision和node/synced时间序列。中甲挡伤害不直接阻止策略计时，因为没有命中或伤害读取；已发现状态短暂交替时两种计时互相清零的盲区，详见[盾虫锁定调查及复现](hive-guard-lock-investigation.md)。0.7.6已增加独立计时并通过交替状态回归，但未确认是反馈现场的唯一原因。主日志2秒刷新不足以排除这种短周期切换。
 
 ## 整机卡死或黑屏
 

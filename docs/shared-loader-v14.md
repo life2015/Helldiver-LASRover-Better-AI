@@ -1,6 +1,6 @@
 # v14内置加载器包
 
-适用版本：0.7.4；更新于2026-09-19。HUD和No HUD均内置完整的固定官方Bingus Shared Loader v14，再直接执行对应的Rover编译本体。无需额外安装独立v14。完整文件名见[六包清单](packaging-channels.md)。
+适用版本：0.7.6；更新于2026-09-19。HUD和No HUD均内置完整的固定官方Bingus Shared Loader v14，再直接执行对应的Rover编译本体。无需额外安装独立v14。完整文件名见[六包清单](packaging-channels.md)。
 
 ## 为什么仍可能提示冲突
 
@@ -16,7 +16,7 @@
 
 ## 日志与离线验证
 
-`%LOCALAPPDATA%/RoverFireSpread-startup.log`应有`experimental-0.7.4-v14`（No HUD加`-No-HUD`）、`shared_loader_release=v14`、`shared_loader_returned`及Rover状态。本体`RoverFireSpread.log`仍为`experimental-0.7.4`。加载器日志位于`%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log`；核对当前PID/时间并检查其他Mod自己的功能。
+`%LOCALAPPDATA%/RoverFireSpread-startup.log`应有`experimental-0.7.6-v14`（No HUD加`-No-HUD`）、`shared_loader_release=v14`、`shared_loader_returned`及Rover状态。本体`RoverFireSpread.log`仍为`experimental-0.7.6`。加载器日志位于`%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log`；核对当前PID/时间并检查其他Mod自己的功能。
 
 `scripts/package_v14.py`从当前已验证的v12 HUD/No HUD包提取对应本体，逐字节复用，替换启动桥。它校验固定v14发布输入及原始回调资源，执行真实字节码的音频回调、模块名单、失败隔离、重复初始化和实际Rover入口测试。其他游戏模块是模拟依赖，尚未证明任意Mod的实机共存。
 

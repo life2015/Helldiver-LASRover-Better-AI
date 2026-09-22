@@ -1,6 +1,8 @@
 # 游戏内运行状态面板
 
-当前版本0.7.4；更新于2026-09-19。v12/v14/v15的HUD本体相同，区别在启动入口。
+当前版本0.7.10；更新于2026-09-22。v12/v14/v15的HUD本体相同，区别在启动入口。
+
+0.7.10：有效本地敌人标记在等待转火期间也于第一行显示绿色`ROVER | MARKED`，使用与索敌干预相同的标题字号与绿色。第二行显示`Marked: ID | waiting for rotation`；同步锁定该目标时改为`current lock`，不代表命中或点燃。活动请求优先显示原有`MOD: MARKED`、`MOD: NEAREST`或`MOD: NATIVE PICK`，避免掩盖超时重选。标记取消、过期、候选失效、快照丢失或停止后，不保留实时MARKED状态；刚结束的实际请求仍可按原有规则显示0.5秒`MOD: MARKED (last)`历史提示。没有改变索敌逻辑、面板位置或五行绘制数量。
 
 0.7.2提供独立No HUD包：完全省略HUD实现，不创建GUI、不读取字体或调用绘制接口；转火和文本日志照常。测试完成后可选择此包；先退出游戏、移除旧变体再安装。以下界面说明仅适用于HUD包。No HUD成功初始化后日志为`hud_enabled=false`、`hud_status=disabled`。
 
@@ -8,6 +10,8 @@ HUD版默认启用屏幕顶部居中的五行小面板，不需要另开外部�
 
 | 第一行 | 含义 |
 | --- | --- |
+| 绿色 `ROVER \| MARKED` | 已识别当前有效的本地敌人标记，等待正常轮换或当前已锁定它；不表示正在干预 |
+| 绿色 `ROVER \| MOD: MARKED` | 标记优先的转火请求正在生效 |
 | 绿色 `ROVER \| MOD: NEAREST` | 最近目标策略的转火请求正在生效，临时筛选尚未恢复 |
 | 黄色 `ROVER \| MOD: NATIVE PICK` | Mod仍在筛选策略允许的候选（超时重选忽略Recent），但距离不可用，由原生AI在允许的候选中选择 |
 | 灰色 `ROVER \| NATIVE` | 此刻没有正在生效的Mod请求；第二行说明原因，Mod仍可能正常运行 |
@@ -20,19 +24,19 @@ HUD版默认启用屏幕顶部居中的五行小面板，不需要另开外部�
 
 原生AI始终负责实际攻击和选敌执行。这个面板表示Mod有没有施加临时筛选，不能解读成游戏切换到了另一套完整AI。
 
-0.7的第二行/Last行显示距离依据：`adjacent target`按本次离开的目标到候选的距离；`near Rover (15m)`表示从15米外优先转回圈内；`nearest Rover`表示目标坐标降级或超时解卡时按距漫游车排序。第一行的NEAREST统指当前距离策略，不一定是离漫游车最近。
+0.7的第二行/Last行显示距离依据：`adjacent target`按本次离开的目标到候选的距离；`near Rover (30m)`表示从30米外优先转回圈内；`nearest Rover`表示目标坐标降级或超时解卡时按距漫游车排序。第一行的NEAREST统指当前距离策略，不一定是离漫游车最近。
 
 第三行`Last`只在成功提交请求后的2秒内显示策略与距今秒数。它是历史事件，独立于第一行结束后0.5秒的颜色保留；计划未提交、写入失败、仅诊断都不产生这条成功请求记录。
 
 第四行`Requests / Changes / Recent`分别表示本次进程累计请求数、请求期间观察到的目标变化数、近期历史项数（0.6最多1个、1秒过期）。Recent包含达到攻击窗口的目标及锁定超时后放弃的目标。这些不是成功点燃次数，`Changes`也不严格证明变化由请求引起。
 
-0.7.4显示`no attack; waiting 1.5s`表示正在等待攻击状态；触发后显示`no attack 1.5s - reselecting`，Last行包含`timeout`。判断依据是节点6/7及目标同步状态，不能据此证明激光真正发射/命中。超时请求忽略上一条Recent，从当前目标以外选最近有效目标；无距离时仍由原生AI选。
+0.7.6显示`no attack; waiting 1.5s`表示正在等待攻击状态；触发后显示`no attack 1.5s - reselecting`，Last行包含`timeout`。判断依据是节点6/7及目标同步状态，不能据此证明激光真正发射/命中。超时请求忽略上一条Recent，从当前目标以外选最近有效目标；无距离时仍由原生AI选。
 
 第五行例如`Locked: 123 | Next: 456`。`Locked`仅在Behavior目标与Targeting目标一致、同步标志有效时显示当前目标ID；未同步、无目标、快照不可用或停止后显示`--`。`Next`在活动请求期间显示目标ID，结束后保留到请求提交满2秒并标注`(last)`，避免0.1秒HUD刷新漏掉短暂请求。距离降级对应`native`或`native (last)`。Next保留与标题额外0.5秒提示独立计时，均不延长游戏内干预；Last行提供距今时间。场景/无人机身份变化、缺失快照或停止时隐藏历史请求。不能把Next当作已锁定；数字为运行时实体ID，可能复用，不是敌人类型或跨局永久身份。
 
 ## 面板没有出现时
 
-检查`%LOCALAPPDATA%/RoverFireSpread.log`的时间、`build_id=experimental-0.7.4`、当前PID及`hud_status`：
+检查`%LOCALAPPDATA%/RoverFireSpread.log`的时间、`build_id=experimental-0.7.6`、当前PID及`hud_status`：
 
 - `visible`：绘制调用完成，但仍需肉眼确认没有被其他界面遮住。
 - `waiting_for_ui`：尚无可用UI world，稍后自动重试。
@@ -53,6 +57,8 @@ HUD版默认启用屏幕顶部居中的五行小面板，不需要另开外部�
 
 要关闭面板，直接选择`package.py`生成的`-No-HUD.zip`，默认v12渠道也可用`deploy.py install --variant no-hud`安装；切换前需退出游戏并卸载旧包。位置/尺寸在`hud.lua`的`x,y,w,h`；HUD横向居中，距顶边24个参考像素，宽410、高129（参考1920×1080），按分辨率缩放。暂未添加快捷键、INI或拖动功能。
 
-## 0.7.4同目标占用兜底
+## 0.7.6同目标占用兜底
 
 活动请求显示`lock 1.5s - reselecting`，Last行标注`max lock /`；连续未攻击超时仍显示`no attack 1.5s - reselecting`及`timeout /`。两者都按距漫游车最近的其他有效候选选择；No HUD版通过`active_reason`/`last_request_reason=lock_max_duration`核对。提示不表示已命中或原生一定完成转火。
+
+0.7.7新增`ROVER | MOD: MARKED`，表示标记优先请求正在生效；结束后额外0.5秒显示`(last)`，Next仍保留2秒。`Selecting/Last: your marked enemy`说明选择依据，不表示正在命中。

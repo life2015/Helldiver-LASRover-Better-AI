@@ -1,5 +1,5 @@
 -- No burn-state reads. Rotation is based on a short, approximate attack window.
-local M={window=0.4,no_attack_seconds=1.5,max_lock_seconds=1.5,retry=0.15,max_gap=0.25,lease_seconds=0.25,history_seconds=1,history_limit=1,near_radius=15}
+local M={window=0.4,no_attack_seconds=1.5,max_lock_seconds=1.5,retry=0.15,max_gap=0.25,lease_seconds=0.25,history_seconds=1,history_limit=1,near_radius=30}
 local function reset_lock(state)
     state.lock_elapsed=0;state.lock_tracking=false
 end
@@ -132,6 +132,16 @@ function M.plan(state,s,now)
     for id,c in pairs(pool)do
         local d=origin and separation(c,origin) or distance(c)
         if d<math.huge and (not best or d<best or d==best and id<selected) then selected=id;best=d end
+    end
+    -- Mark priority never overrides timeout escape, current-target exclusion or Recent.
+    local mark=s.marked
+    if not timeout and mark and mark.id~=s.target and not state.visited[mark.id] then
+        for _,c in ipairs(s.candidates or {})do
+            if c.id==mark.id and c.eligible and c.identity and c.identity==mark.identity then
+                selected=c.id;best=distance(c);if best==math.huge then best=nil end
+                basis='player_mark';break
+            end
+        end
     end
     local allowed={}
     if selected then allowed[selected]=true else for id in pairs(pool)do allowed[id]=true end end

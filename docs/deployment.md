@@ -1,6 +1,14 @@
 # 部署、启动、升级与回退
 
-适用版本：0.7.4；更新于2026-09-19。玩家直接阅读[玩家中文说明](player-guide.zh-CN.md)；本页补充本地部署脚本和维护者验收步骤。
+适用版本：0.7.7；更新于2026-09-22。玩家直接阅读[玩家中文说明](player-guide.zh-CN.md)；本页补充本地部署脚本和维护者验收步骤。
+
+## 本机最新安装
+
+2026-09-22 22:36，0.7.7 v15 HUD已部署到本机。包SHA-256：`D6A7E7634B369541962D0792F77A76107CEC7AAFE1AADCAAE4F8E9CB7AA6F3C8`。自有patch_3及sidecar读回校验通过，其余14个patch相关文件不变。旧版备份在`build/pre-deploy-0.7.7-20260922-223649/`。新进程标记优先尚待实机验收。
+
+实际归档资源核对：patch_4是官方v15加载器（SHA-256 8312B061...，与固定官方ZIP内容一致），patch_5是EATAirburst（当前0.2.3、D10C2FE1...）；旧排查记录对这两个用途曾标注颠倒。本次没有改动二者，也没有额外复制加载器。
+
+本机当前渠道为v15；下文deploy.py install仅适用于v12，不能用来覆盖本机v15模块。此次依据现有部署记录及哈希执行局部更新，独立加载器沿用已安装版本。
 
 ## 先选加载器渠道和HUD变体
 
@@ -48,7 +56,7 @@ Get-Item "$env:LOCALAPPDATA\RoverFireSpread.log" | Select-Object Name, LastWrite
 Get-Content "$env:LOCALAPPDATA\RoverFireSpread.log"
 ```
 
-所有0.7.4渠道的本体日志均应为`build_id=experimental-0.7.4`，`process_id`对应本次游戏，更新时间晚于本次启动。连续读取时`samples`增长；飞船中的`waiting_for_mission`和`requests=0`正常。`build_id`本身不区分加载器渠道，需要结合ZIP身份和启动日志。
+所有0.7.7渠道的本体日志均应为`build_id=experimental-0.7.7`，`process_id`对应本次游戏，更新时间晚于本次启动。连续读取时`samples`增长；飞船中的`waiting_for_mission`和`requests=0`正常。`build_id`本身不区分加载器渠道，需要结合ZIP身份和启动日志。
 
 | 渠道 | 额外检查 |
 | --- | --- |

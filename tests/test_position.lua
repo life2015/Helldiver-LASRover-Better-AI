@@ -38,4 +38,10 @@ end)
 test('missing unit and missing root do not abort the controller',function()
     assert(not P.read(api,exe,0));ptr(exe+0x1a140f0,0);assert(not P.read(api,exe,unit));ptr(exe+0x1a140f0,units)
 end)
+test('new layout reads the relocated unit root without using the old slot',function()
+    api.layout=assert(loadfile(ROOT..'/src/layout.lua'))().profiles[1]
+    ptr(exe+0x1a140f0,0);ptr(exe+0x1a100f0,units)
+    local p=P.read(api,exe,unit);assert(p and p[1]==12 and p[2]==34 and p[3]==56)
+    ptr(exe+0x1a100f0,0);api.layout=nil;ptr(exe+0x1a140f0,units)
+end)
 return tostring(count)..' position tests passed'

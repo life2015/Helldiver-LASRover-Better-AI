@@ -1,14 +1,14 @@
 # 多加载器版本与HUD变体
 
-更新于2026-09-19；适用0.7.4。
+更新于2026-09-19；适用0.7.8。
 
-从当前0.7.4构建起，运行`python scripts/package.py`会生成六个ZIP。文件名中的v12/v14/v15是Bingus加载器渠道，不是索敌算法版本。六包使用相同的当前索敌源码及参数；同一种HUD变体的编译本体在三个渠道逐字节复用。
+从当前0.7.8构建起，运行`python scripts/package.py`会生成六个ZIP。文件名中的v12/v14/v15是Bingus加载器渠道，不是索敌算法版本。六包使用相同的当前索敌源码及参数；同一种HUD变体的编译本体在三个渠道逐字节复用。
 
 | 渠道 | HUD包 | 无HUD包 | 加载方式 |
 | --- | --- | --- | --- |
-| v12（默认渠道） | 激光狗索敌优化-0.7.4-v12-内置加载器.zip | 激光狗索敌优化-0.7.4-v12-内置加载器-No-HUD.zip | 内置固定v12启动桥 |
-| v14 | 激光狗索敌优化-0.7.4-v14-内置加载器.zip | 激光狗索敌优化-0.7.4-v14-内置加载器-No-HUD.zip | 内置完整官方v14，然后启动Rover |
-| v15 Addon | 激光狗索敌优化-0.7.4-v15-需要额外安装加载器.zip | 激光狗索敌优化-0.7.4-v15-需要额外安装加载器-No-HUD.zip | 不包含加载器，另装官方v15，由其自动发现入口 |
+| v12（默认渠道） | 激光狗索敌优化-0.7.8-v12-内置加载器.zip | 激光狗索敌优化-0.7.8-v12-内置加载器-No-HUD.zip | 内置固定v12启动桥 |
+| v14 | 激光狗索敌优化-0.7.8-v14-内置加载器.zip | 激光狗索敌优化-0.7.8-v14-内置加载器-No-HUD.zip | 内置完整官方v14，然后启动Rover |
+| v15 Addon | 激光狗索敌优化-0.7.8-v15-需要额外安装加载器.zip | 激光狗索敌优化-0.7.8-v15-需要额外安装加载器-No-HUD.zip | 不包含加载器，另装官方v15，由其自动发现入口 |
 
 文件命名统一为`激光狗索敌优化-版本-v12/v14/v15-加载器说明[-No-HUD].zip`。v12/v14标注“内置加载器”，v15标注“需要额外安装加载器”；管理器显示名同步标注。历史旧名称ZIP可以保留用于回退，本次分发以`build/package-matrix.json`列出的六包为准。
 
@@ -29,9 +29,9 @@ v12/v14均无需额外安装同版独立加载器；v15必须另装官方加载�
 
 ## 日志确认
 
-本体日志仍为`%LOCALAPPDATA%/RoverFireSpread.log`，本体build_id为`experimental-0.7.4`。No HUD成功运行后应为`hud_enabled=false`、`hud_status=disabled`；HUD版为hud_enabled=true。核对本次PID和文件更新时间，加载成功不等于已经验证实际转火或稳定性。
+本体日志仍为`%LOCALAPPDATA%/RoverFireSpread.log`，本体build_id为`experimental-0.7.8`。No HUD成功运行后应为`hud_enabled=false`、`hud_status=disabled`；HUD版为hud_enabled=true。核对本次PID和文件更新时间，加载成功不等于已经验证实际转火或稳定性。
 
-v14的`RoverFireSpread-startup.log`标明`experimental-0.7.4-v14`（No HUD再带`-No-HUD`）和`shared_loader_release=v14`。v15 Addon不会更新此旧启动日志，应看官方日志`%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log`中的发现记录、`mods/retrox/rover_fire_spread: loaded`，再核对Rover本体状态。
+v14的`RoverFireSpread-startup.log`标明`experimental-0.7.8-v14`（No HUD再带`-No-HUD`）和`shared_loader_release=v14`。v15 Addon不会更新此旧启动日志，应看官方日志`%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log`中的发现记录、`mods/retrox/rover_fire_spread: loaded`，再核对Rover本体状态。
 
 卸载时退出游戏，只移除所选Rover包；保留其他Mod需要的独立加载器。回退旧内置渠道前先移除当前Addon，并重新核对所用加载器和启动优先级。
 
@@ -50,3 +50,5 @@ v14的`RoverFireSpread-startup.log`标明`experimental-0.7.4-v14`（No HUD再带
 默认报告仍为`build/experimental-package-report[ -no-hud ].json`（实际文件名不含空格）；渠道报告为`build/v14-compat/{hud,no-hud}/package-report.json`、`build/v15-addon/{hud,no-hud}/package-report.json`。成功完成六包后输出`build/package-matrix.json`，列出本次版本及六包名称/哈希；每包内部另带provenance.json。
 
 构建验证包含：编译入口实际HUD配置、v14音频回调/模块名单保留和失败隔离、v15真实发布字节码在临时目录发现入口（加载器与Addon两种编号顺序、缺失实现、无Addon）、本体字节不变、v15无启动资源交集，以及全部归档往返/ZIP完整性。这些离线检查不等于实机共存或整机稳定性验证。
+
+0.7.8包含新旧两个显式游戏布局，运行时依模块哈希对选择并检查关键代码。该版本的更新兼容证据见[迁移记录](game-update-25327279.md)。

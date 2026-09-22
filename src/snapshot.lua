@@ -17,6 +17,8 @@ end
 local NOT_READY,CHANGING={},{}
 local function read_snapshot(api,game)
     local guards={};local reads=0
+    local layout=api.layout or {};local roots=layout.roots or {}
+    local function address(rva)return game+(roots[rva] or rva)end
     local function read(a,n,guard)
         reads=reads+1;assert(reads<=1800,'snapshot read bound')
         local b=api.read(a,n)
@@ -29,7 +31,7 @@ local function read_snapshot(api,game)
     end
     local function ptr(a,guard)return pointer(read(a,8,guard))end
     local function consistent(ok)if not ok then error(CHANGING,0) end end
-    local function root(rva)return ptr(game+rva,true)end
+    local function root(rva)return ptr(address(rva),true)end
     local function scope(first,extra)
         local result=extra or {}
         for i=first,#guards do result[#result+1]=guards[i] end
@@ -61,10 +63,10 @@ local function read_snapshot(api,game)
     assert(u(counts)<=4 and u(counts,4)<=4,'player bound')
     if u(counts)==0 or u(counts,4)==0 then return nil,'waiting_for_player' end
     local unit=u(read(pm+0x3a8,4,true));if unit==0x7fff then return nil,'waiting_for_avatar' end
-    local owner=root(0x276f0c0);local ei=lookup(owner+0xf21a88,unit,1048576)
+    local owner=root(0x276f0c0);local ei=lookup(owner+(layout.owner_map or 0xf21a88),unit,1048576)
     if not ei then return nil,'waiting_for_avatar' end
     assert(ei<262144,'entity bound')
-    local avatar=read(owner+0xf31ad8+ei*24,24,true);local aid=u(avatar,8)
+    local avatar=read(owner+(layout.owner_entities or 0xf31ad8)+ei*24,24,true);local aid=u(avatar,8)
     if avatar:sub(1,8)~=AVATAR or bit.band(avatar:byte(21),3)~=1 then return nil,'avatar_not_local' end
     local eq=root(0x276c468);local qi=lookup(eq+40,aid,8192)
     if not qi then return nil,'no_equipment' end
@@ -111,10 +113,10 @@ local function read_snapshot(api,game)
     local bi=lookup(bm+64,id,32768);if not bi then return nil,'no_behavior' end
     assert(bi<u(read(bm+32,4)) and bi<16384,'behavior bound')
     consistent(ptr(ptr(bm+88,true)+bi*8,true)==entity)
-    local ba,behavior=array(bm,96,bi,496,160)
-    assert(u(behavior)==189,'unsupported drone behavior')
+    local ba,behavior=array(bm,96,bi,layout.behavior_stride or 496,160)
+    assert(u(behavior)==(layout.behavior_id or 189),'unsupported drone behavior')
     local behavior_guards=scope(behavior_start,{
-        {address=game+0x276c470,bytes=read(game+0x276c470,8)},
+        {address=address(0x276c470),bytes=read(address(0x276c470),8)},
         {address=entity,bytes=ent:sub(1,20)},
         {address=ba,bytes=behavior:sub(1,4)},
         {address=ba+104,bytes=behavior:sub(105,108)}})
@@ -176,13 +178,15 @@ local function read_snapshot(api,game)
     end
     -- Native function 87f9a0 skips empty special entries using the +0x48 marker.
     for _,off in ipairs({0x1228,0x1278,0x12c8}) do if u(data,off+0x48)~=0 then candidate(off) end end
+    local marked,marker_status
+    if api.markers then marked,marker_status=api.markers(game,aid,candidates) end
     local clock=root(0x276c068);local now=tick(read(clock+24,8))
     local deadline=tick(behavior:sub(153,160))
     assert(now>0 and now<9007199254740991 and deadline<9007199254740991,'clock bound')
     local target=u(behavior,24);local node=u(behavior,8)
     return {key=avatar:sub(1,20)..pack:sub(1,20)..ent:sub(1,20),id=id,target=target,node=node,
         synced=target~=0 and u(aim)==target and behavior:byte(121)==1 and bit.band(u(behavior,96),1)~=0,
-        candidates=candidates,distance_available=origin~=nil,now_native=now,deadline=behavior:sub(153,160),deadline_value=deadline,deadline_address=ba+152,
+        marked=marked,marker_status=marker_status or 'unavailable',candidates=candidates,distance_available=origin~=nil,now_native=now,deadline=behavior:sub(153,160),deadline_value=deadline,deadline_address=ba+152,
         guards=guards,valid=function()return M.matches(api,behavior_guards)end,
         transition={{address=ba,bytes=behavior:sub(1,4)},{address=ba+8,bytes=behavior:sub(9,12)},
             {address=ba+24,bytes=behavior:sub(25,28)},

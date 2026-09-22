@@ -30,14 +30,28 @@ def main():
     lua = None
     try:
         modules = reader.modules()
-        for name, expected in [('game.dll', GAME_SHA), ('helldivers2.exe', EXE_SHA)]:
-            if hashlib.sha256(modules[name][1].read_bytes()).hexdigest() != expected:
-                raise ValueError('Unsupported module: ' + name)
+        hashes={name:hashlib.sha256(modules[name][1].read_bytes()).hexdigest().upper()
+                for name in ['game.dll','helldivers2.exe']}
         base = modules['game.dll'][0]
-        signature = bytes.fromhex('405741574883ec283b1532ed0c02450fb6f94c8b15074b0b')
-        if reader.read(base + 0x6b7f20, len(signature)) != signature:
-            raise ValueError('Runtime signature mismatch')
         lua = Lua(GAME / 'bin/lua51.dll')
+        layout_file=literal((ROOT/'src/layout.lua').as_posix().encode())
+        selection=lua.run('local p=assert(loadfile('+layout_file+'))().profiles;for i,v in ipairs(p)do '
+            +'if v.game_sha=='+literal(hashes['game.dll'].encode())+' and v.exe_sha=='
+            +literal(hashes['helldivers2.exe'].encode())+' then return tostring(i) end end;return "0"').decode()
+        layout_index=int(selection)
+        if layout_index==0:
+            if hashes['game.dll']!=GAME_SHA.upper() or hashes['helldivers2.exe']!=EXE_SHA.upper():
+                raise ValueError('Unsupported module pair; no verified layout')
+            signatures=[(0x6b7f20,'405741574883ec283b1532ed0c02450fb6f94c8b15074b0b'),
+                        (0x2609d0,'40554154488dac24f8fdffff4881ec08030000440f298c24'),
+                        (0x260f5c,'488b1505b15002498b4c24084c8b42184c3981900000000f')]
+        else:
+            encoded=lua.run('local rows={};for _,s in ipairs(assert(loadfile('+layout_file+'))().profiles['
+                +str(layout_index)+'].signatures)do rows[#rows+1]=tostring(s[1])..":"..s[2] end;return table.concat(rows,";")').decode()
+            signatures=[(int(a),b) for a,b in (row.split(':') for row in encoded.split(';'))]
+        for rva,signature in signatures:
+            expected=bytes.fromhex(signature)
+            if reader.read(base+rva,len(expected))!=expected:raise ValueError('Runtime signature mismatch')
         lib = lua.lib
         lib.lua_tonumber.argtypes = [C.c_void_p, C.c_int]
         lib.lua_tonumber.restype = C.c_double
@@ -60,7 +74,7 @@ def main():
 
         lib.lua_pushcclosure(lua.state, read_callback, 0)
         lib.lua_setfield(lua.state, -10002, b'host_read')
-        lua.run('ROOT=' + literal(ROOT.as_posix().encode()) + ';GAME=' + str(base) + ';EXE=' + str(modules['helldivers2.exe'][0]))
+        lua.run('ROOT=' + literal(ROOT.as_posix().encode()) + ';LAYOUT_INDEX='+str(layout_index)+';GAME=' + str(base) + ';EXE=' + str(modules['helldivers2.exe'][0]))
         lua.run('''
             local ffi=require('ffi')
             local function load(name)return assert(loadfile(ROOT..'/src/'..name..'.lua'))()end
@@ -70,6 +84,8 @@ def main():
                     return n>=0x10000 and n<0x800000000000 and n or nil
                 end,
                 write=function()error('read-only observer')end}
+            api.layout=load('layout').profiles[LAYOUT_INDEX]
+            local markers=load('markers');api.markers=function(game,owner,candidates)return markers.read(api,game,owner,candidates)end
             local snapshot=load('snapshot')
             local position=load('position')
             api.position=function(unit)return position.read(api,EXE,unit)end
@@ -90,7 +106,7 @@ def main():
                     CONTROL.node or 0,CONTROL.eligible or 0,CONTROL.would_rotate or 0,table.concat(rows,','),
                     s and s.distance_available and '1' or '0',table.concat(distances,','),CONTROL.planned_target or 0,
                     CONTROL.ranking or '',CONTROL.history_count or 0,CONTROL.decision or '',
-                    CONTROL.no_attack_elapsed or 0},'\t')
+                    CONTROL.no_attack_elapsed or 0,CONTROL.marked_target or 0,CONTROL.marker_status or '',CONTROL.selection_basis or ''},'\t')
             end
         ''')
         folder = ROOT.parent / 'research/artifacts'

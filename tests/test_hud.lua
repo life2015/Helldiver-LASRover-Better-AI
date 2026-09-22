@@ -4,11 +4,11 @@ local function test(name,fn)fn();passed=passed+1;print('PASS '..name)end
 test('HUD explains adjacent selection and close threat priority including the retained request',function()
     local c={active_request=true,active_ranking='nearest',active_basis='previous_target',active_target=2}
     assert(H.model({},c,1).lines[2]=='Selecting: adjacent target')
-    c.active_basis='near_rover';assert(H.model({},c,1).lines[2]=='Selecting: near Rover (15m)')
+    c.active_basis='near_rover';assert(H.model({},c,1).lines[2]=='Selecting: near Rover (30m)')
     c.active_request=false;c.last_request_at=1;c.current_key='a';c.last_request_key='a'
     c.last_request_basis='near_rover';c.last_request_ranking='nearest';c.last_request_target=2
     local m=H.model({},c,1.5)
-    assert(m.lines[3]:find('near Rover (15m)',1,true) and m.lines[5]:find('2 (last)',1,true))
+    assert(m.lines[3]:find('near Rover (30m)',1,true) and m.lines[5]:find('2 (last)',1,true))
 end)
 test('HUD differentiates mod nearest and filtered native selection',function()
     local c={active_request=true,active_ranking='nearest'}
@@ -202,5 +202,21 @@ test('watchdog HUD distinguishes maximum lock duration from no attack timeout',f
         last_request_reason='lock_max_duration',last_request_at=0,current_key='a',last_request_key='a'}
     local m=H.model({},c,.2)
     assert(m.lines[2]=='lock 1.5s - reselecting' and m.lines[3]:find('max lock /',1,true))
+end)
+test('new layout font reads only relocated resource slots',function()
+    local f=fixture();local profile=assert(loadfile(ROOT..'/src/layout.lua'))().profiles[1]
+    for _,old in ipairs({0x2ac7058,0x2a750d8,0x2a75d58})do
+        f.data[1000+profile.roots[old]]=f.data[1000+old];f.data[1000+old]=nil
+    end
+    f.api.layout=profile
+    local font=H.font(f.api,1000)
+    assert(font.font=='b56d2abac5d17df2' and font.atlas=='d1ebb991c79f934b' and font.material=='9f85b87d3ff20cbb')
+end)
+test('marked priority has distinct active and retained HUD labels',function()
+    local c={active_request=true,active_ranking='nearest',active_basis='player_mark',active_target=22}
+    local m=H.model({},c,1);assert(m.lines[1]=='ROVER | MOD: MARKED' and m.lines[2]=='Selecting: your marked enemy' and m.lines[5]:find('22'))
+    c.active_request=false;c.current_key='a';c.last_request_key='a';c.last_request_at=1;c.last_request_finished_at=1
+    c.last_request_ranking='nearest';c.last_request_basis='player_mark';c.last_request_target=22
+    assert(H.model({},c,1.2).lines[1]=='ROVER | MOD: MARKED (last)')
 end)
 return tostring(passed)..' HUD tests passed'

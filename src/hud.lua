@@ -1,9 +1,9 @@
 -- Optional retained GUI. Drawing failures never stop the targeting controller.
 -- Font/material setup follows KnowYourConstellation's native body-font panel.
 local M={status_hold_seconds=0.5}
-local basis_labels={previous_target='adjacent target',near_rover='near Rover (15m)',rover_fallback='nearest Rover',timeout_rover='nearest Rover'}
+local basis_labels={player_mark='your marked enemy',previous_target='adjacent target',near_rover='near Rover (30m)',rover_fallback='nearest Rover',timeout_rover='nearest Rover'}
 local reasons={attack_window='attack window',no_attack_window='no attack; waiting 1.5s',no_alternative='no other target',tracking='tracking / aiming',
-    retry_delay='retry delay',request_finished='request released',precondition_changed='data changed; retry',
+    mark_changed='mark changed; retry',retry_delay='retry delay',request_finished='request released',precondition_changed='data changed; retry',
     no_writes='no change needed',diagnostic='diagnostic only'}
 function M.model(state,c,now)
     c=c or {}
@@ -12,18 +12,26 @@ function M.model(state,c,now)
         and c.current_key==c.last_request_key and age and age>=0
     local released_age=c.last_request_finished_at and now-c.last_request_finished_at
     local held=same_context and released_age and released_age>=0 and released_age<M.status_hold_seconds
+    local marked=c.current_key~=nil and c.marker_status=='eligible'
+        and type(c.marked_target)=='number' and c.marked_target>0
     local title,tone,detail='ROVER | WAITING','neutral','waiting for local laser Rover'
     if state.stopped or c.stopped then
         title='ROVER | STOPPED';tone='error'
         detail=c.cleanup_pending and 'restoration pending - see log' or 'Mod inactive - see log'
     elseif c.active_request then
-        if c.active_ranking=='nearest' then title='ROVER | MOD: NEAREST';tone='good'
+        if c.active_basis=='player_mark' then title='ROVER | MOD: MARKED';tone='good'
+        elseif c.active_ranking=='nearest' then title='ROVER | MOD: NEAREST';tone='good'
         else title='ROVER | MOD: NATIVE PICK';tone='partial' end
         if c.active_reason=='lock_timeout' then detail='no attack 1.5s - reselecting'
         elseif c.active_reason=='lock_max_duration' then detail='lock 1.5s - reselecting'
         else detail=basis_labels[c.active_basis] and 'Selecting: '..basis_labels[c.active_basis] or 'rotation request active' end
+    elseif marked then
+        title='ROVER | MARKED';tone='good'
+        local current=c.target_synced and c.target==c.marked_target
+        detail=string.format('Marked: %d | %s',c.marked_target,current and 'current lock' or 'waiting for rotation')
     elseif held and (c.last_request_ranking=='nearest' or c.last_request_ranking=='native_distance_unavailable') then
-        if c.last_request_ranking=='nearest' then title='ROVER | MOD: NEAREST (last)';tone='good'
+        if c.last_request_basis=='player_mark' then title='ROVER | MOD: MARKED (last)';tone='good'
+        elseif c.last_request_ranking=='nearest' then title='ROVER | MOD: NEAREST (last)';tone='good'
         else title='ROVER | MOD: NATIVE PICK (last)';tone='partial' end
         detail='Request ended - native control'
     elseif reasons[c.decision] then
@@ -53,6 +61,8 @@ function M.model(state,c,now)
 end
 
 function M.font(api,game)
+    local roots=api.layout and api.layout.roots or {}
+    local function address(rva)return game+(roots[rva] or rva)end
     local function bytes(address)
         local b=api.read(address,8);assert(b and #b==8,'Font data not ready');return b
     end
@@ -60,11 +70,11 @@ function M.font(api,game)
         local out={};for i=8,1,-1 do out[#out+1]=string.format('%02x',b:byte(i))end
         local result=table.concat(out);assert(result~='0000000000000000','Font not ready');return result
     end
-    local pointer_bytes=bytes(game+0x2ac7058)
+    local pointer_bytes=bytes(address(0x2ac7058))
     local owner=assert(api.pointer(pointer_bytes),'Font material not ready')
-    local font_bytes,material_bytes,atlas_bytes=bytes(game+0x2a750d8),bytes(owner+24),bytes(game+0x2a75d58)
-    assert(bytes(game+0x2ac7058)==pointer_bytes and bytes(game+0x2a750d8)==font_bytes
-        and bytes(owner+24)==material_bytes and bytes(game+0x2a75d58)==atlas_bytes,'Font changed during read')
+    local font_bytes,material_bytes,atlas_bytes=bytes(address(0x2a750d8)),bytes(owner+24),bytes(address(0x2a75d58))
+    assert(bytes(address(0x2ac7058))==pointer_bytes and bytes(address(0x2a750d8))==font_bytes
+        and bytes(owner+24)==material_bytes and bytes(address(0x2a75d58))==atlas_bytes,'Font changed during read')
     return {font=hash(font_bytes),material=hash(material_bytes),atlas=hash(atlas_bytes)}
 end
 

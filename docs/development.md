@@ -1,6 +1,6 @@
 # 开发与构建
 
-当前版本0.7.4；更新于2026-09-19。默认打包一次生成v12/v14/v15 × HUD/No HUD六包，不部署也不启动游戏。
+当前版本0.7.8；更新于2026-09-19。默认打包一次生成v12/v14/v15 × HUD/No HUD六包，不部署也不启动游戏。
 
 ## 环境和目录依赖
 
@@ -71,7 +71,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
 
 | 命令 | 作用 |
 | --- | --- |
-| `test.py` | 每个`test_*.lua`使用独立Lua state；当前127项：核心66、生命周期13、HUD25、位置6、快照17 |
+| `test.py` | 每个`test_*.lua`使用独立Lua state；当前174项：核心66、生命周期17、HUD26、位置7、旧布局快照17、新布局快照17 |
 | `tests/test_deploy.py` | 5项临时模拟目录测试，验证部署校验、No HUD选择及卸载后切换，不接触真实安装 |
 | `build.py` | 默认生成禁止写入的诊断入口和报告 |
 | `build.py --experimental [--no-hud]` | 单独编译实验本体，不生成完整安装ZIP |
@@ -103,7 +103,7 @@ v12/v14分别执行实际编译桥，验证原音频回调、Rover入口及HUD�
 
 ## 文件名、报告与复现
 
-ZIP统一为`激光狗索敌优化-0.7.4-渠道-加载器说明[-No-HUD].zip`。v12/v14说明为“内置加载器”，v15为“需要额外安装加载器”；manifest显示名也标注。名称集中在`package.py`的`PACKAGE_NAME`及`package_name()`，完整清单见[多渠道说明](packaging-channels.md)。
+ZIP统一为`激光狗索敌优化-0.7.8-渠道-加载器说明[-No-HUD].zip`。v12/v14说明为“内置加载器”，v15为“需要额外安装加载器”；manifest显示名也标注。名称集中在`package.py`的`PACKAGE_NAME`及`package_name()`，完整清单见[多渠道说明](packaging-channels.md)。
 
 | 文件 | 用途 |
 | --- | --- |

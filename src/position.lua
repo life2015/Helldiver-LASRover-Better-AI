@@ -12,7 +12,7 @@ function M.read(api,exe,unit)
     end
     local function ptr(a)return assert(api.pointer(read(a,8,true)))end
     local ok,result=pcall(function()
-        local units=ptr(exe+0x1a140f0);local index=unit%0x400000
+        local units=ptr(exe+((api.layout and api.layout.exe_unit_root) or 0x1a140f0));local index=unit%0x400000
         assert(index<uint(read(units+0x98,4)))
         local generations=ptr(units+0xa0)
         assert(read(generations+index,1,true)==string.char(math.floor(unit/0x400000)%256))

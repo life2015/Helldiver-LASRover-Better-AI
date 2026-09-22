@@ -8,12 +8,12 @@ local function fixture(original,options)
     local polls,stops=0,0
     local api={time=function()return 0 end,module=function(name)return name and 100 or 200 end,
         module_hash=function(module)return module==100 and (options.game_actual or 'hash') or (options.exe_actual or 'hash')end,
-        read=function()return options.signature_actual end}
+        read=options.read or function()return options.signature_actual end}
     local oldopen=io.open;io.open=function()return nil end
     install(function()return api end,nil,nil,nil,function()
         return {status='observing',poll=function()polls=polls+1;if options.fail then error('poll error')end;return true end,
             stop=function()stops=stops+1;return true end}
-    end,{enabled=false,game_sha='hash',exe_sha='hash',signatures=options.signatures or {},show_hud=options.show_hud},options.hud)
+    end,{enabled=false,game_sha='hash',exe_sha='hash',signatures=options.signatures or {},layouts=options.layouts,show_hud=options.show_hud},options.hud)
     io.open=oldopen
     return api,function()return polls,stops end
 end
@@ -73,6 +73,38 @@ test('HUD can be disabled without changing the update chain',function()
     local _,counts=fixture(function()return 'ok'end,{show_hud=false,hud={new=function()error('must not create')end}})
     assert(update()=='ok' and RoverFireSpread.hud_status=='disabled')
     assert(counts()>0 and RoverFireSpread.hud_enabled==false)
+end)
+local profile=assert(loadfile(ROOT..'/src/layout.lua'))().profiles[1]
+local function profile_read(a,n)
+    for _,sig in ipairs(profile.signatures)do
+        if a==100+sig[1] then return (sig[2]:gsub('..',function(x)return string.char(tonumber(x,16))end)) end
+    end
+end
+test('matching new module pair selects its own layout and validates all signatures',function()
+    local api=fixture(function()end,{game_actual=profile.game_sha,exe_actual=profile.exe_sha,
+        layouts={profile},read=profile_read,signatures={{0,'ff'}}})
+    assert(api.layout==profile and RoverFireSpread.layout_id=='25327279' and not RoverFireSpread.stopped)
+    assert(RoverFireSpread.compatibility=='verified_layout_hash_match')
+end)
+test('each new-layout signature remains mandatory',function()
+    for _,bad in ipairs(profile.signatures)do
+        local original=function()end
+        fixture(original,{game_actual=profile.game_sha,exe_actual=profile.exe_sha,layouts={profile},
+            read=function(a,n)if a==100+bad[1] then return nil end;return profile_read(a,n)end})
+        assert(update==original and RoverFireSpread.stopped and RoverFireSpread.status:find('signature mismatch'))
+    end
+end)
+test('one matching module does not select a mixed-version layout',function()
+    for _,pair in ipairs({{profile.game_sha,'different'},{'different',profile.exe_sha}})do
+        local api=fixture(function()end,{game_actual=pair[1],exe_actual=pair[2],layouts={profile}})
+        assert(not api.layout and RoverFireSpread.layout_id=='24826606')
+    end
+end)
+test('HUD receives verified font layout after new profile selection',function()
+    local seen=false
+    fixture(function()end,{game_actual=profile.game_sha,exe_actual=profile.exe_sha,layouts={profile},read=profile_read,
+        hud={new=function(_,api,_,verified)seen=verified and api.layout==profile;return {frame=function()end}end}})
+    update();assert(seen)
 end)
 io=real_io
 return tostring(passed)..' installation tests passed'

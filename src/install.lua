@@ -10,15 +10,15 @@ return function(create_api,snapshot,policy,leases,controller,build,hud)
         pcall(function()
             local dir=os.getenv('LOCALAPPDATA');if not dir then return end
             local f=io.open(dir..'/RoverFireSpread.log','w');if not f then return end
-            f:write('Rover Fire Spread prototype 0.7.4\nbuild_id=experimental-0.7.4\nmode='..state.mode..'\nstatus='..tostring(state.status)..'\n')
+            f:write('Rover Fire Spread prototype 0.7.10\nbuild_id=experimental-0.7.10\nmode='..state.mode..'\nstatus='..tostring(state.status)..'\n')
             f:write('process_id='..tostring(api and api.pid and api.pid() or 0)..'\n')
             f:write('hud_enabled='..tostring(state.hud_enabled)..'\n')
-            for _,key in ipairs({'compatibility','game_sha256','exe_sha256','hud_status','hud_error'})do
+            for _,key in ipairs({'compatibility','layout_id','game_sha256','exe_sha256','hud_status','hud_error'})do
                 f:write(key..'='..tostring(state[key] or 'pending')..'\n')
             end
             if control then
                 for _,key in ipairs({'samples','requests','rotations','would_rotate','id','target','node','candidates','eligible',
-                    'history_count','history_limit','history_seconds','distance_available','planned_target','planned_distance','ranking','selection_basis',
+                    'history_count','history_limit','history_seconds','distance_available','planned_target','planned_distance','ranking','selection_basis','marked_target','marker_status',
                     'decision','target_synced','active_request','active_ranking','active_target','active_reason','no_attack_elapsed','lock_elapsed','lock_limit',
                     'last_request_at','last_request_finished_at','last_request_ranking','last_request_target','last_request_reason','active_basis','last_request_basis','cleanup_pending'})do
                     local value=control[key];if value==nil then value=0 end
@@ -38,7 +38,15 @@ return function(create_api,snapshot,policy,leases,controller,build,hud)
             and 'baseline_hash_match' or 'unverified_build_attempt'
         -- A whole-file hash change is advisory. Signatures and all per-write
         -- identity/layout checks remain mandatory on an unverified build.
-        for _,sig in ipairs(build.signatures)do
+        local signatures=build.signatures
+        state.layout_id='24826606';api.layout=nil
+        for _,profile in ipairs(build.layouts or {})do
+            if state.game_sha256==profile.game_sha and state.exe_sha256==profile.exe_sha then
+                api.layout=profile;state.layout_id=profile.id;signatures=profile.signatures
+                state.compatibility='verified_layout_hash_match';break
+            end
+        end
+        for _,sig in ipairs(signatures)do
             local bytes=sig[2]:gsub('..',function(x)return string.char(tonumber(x,16))end)
             assert(api.read(game+sig[1],#bytes)==bytes,'Runtime signature mismatch')
         end
@@ -69,7 +77,7 @@ return function(create_api,snapshot,policy,leases,controller,build,hud)
         check()
         if hud and build.show_hud~=false then
             local drawn,err=pcall(function()
-                if not surface then surface=hud.new(rawget(_G,'stingray'),api,game,state.game_sha256==build.game_sha)end
+                if not surface then surface=hud.new(rawget(_G,'stingray'),api,game,(api.layout~=nil or state.game_sha256==build.game_sha))end
                 surface:frame(state,control)
             end)
             if not drawn then state.hud_status='unavailable';state.hud_error=tostring(err)end

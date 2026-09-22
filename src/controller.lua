@@ -21,6 +21,7 @@ return function(api,snapshot,policy,leases,game,enabled)
         local s,reason=snapshot.read(api,game)
         M.samples=M.samples+1;M.status=reason
         M.current_key=s and s.key or nil
+        M.marked_target=s and s.marked and s.marked.id or 0;M.marker_status=s and s.marker_status or 'no_snapshot'
         M.decision=reason or 'waiting';M.planned_target=0;M.planned_distance=-1;M.ranking=nil;M.selection_basis=nil
         if s then
             M.id=s.id;M.target=s.target;M.target_synced=s.synced==true;M.node=s.node;M.candidates=#s.candidates
@@ -35,7 +36,7 @@ return function(api,snapshot,policy,leases,game,enabled)
         if pending then
             local consumed=api.read(pending.deadline_address,8)
             if not s or s.key~=pending.key or s.node~=pending.node or s.target~=pending.target or now>=pending.until_time
-                or consumed~=pending.deadline_after then
+                or consumed~=pending.deadline_after or (pending.mark_valid and not pending.mark_valid()) then
                 if s and s.key==pending.key and s.target~=0 and s.target~=pending.target then M.rotations=M.rotations+1 end
                 if not restore() then M.decision='restore_pending';return false,'restore_pending' end
                 M.last_request_finished_at=now -- HUD-only hold starts after actual restoration.
@@ -57,6 +58,7 @@ return function(api,snapshot,policy,leases,game,enabled)
         M.selection_basis=plan.selection_basis
         if not enabled then M.decision='diagnostic';M.status='diagnostic_would_rotate';M.would_rotate=(M.would_rotate or 0)+1;policy.committed(M.policy,plan,now);return true end
         if snapshot.matches(api,s.guards)~=true or snapshot.matches(api,s.transition)~=true then M.decision='precondition_changed';return true end
+        if plan.selection_basis=='player_mark' and (not s.marked or not s.marked.valid()) then M.decision='mark_changed';return true end
         if s.deadline_value-s.now_native>1000000 then return false,'unexpected_selection_deadline' end
         local writes={}
         for _,c in ipairs(s.candidates) do
@@ -69,7 +71,7 @@ return function(api,snapshot,policy,leases,game,enabled)
         writes[#writes+1]={address=s.deadline_address,before=s.deadline,after=due,valid=s.valid}
         local acquired,why=leases.acquire(api,writes)
         if not acquired then M.status=why;M.decision=why;return true end
-        pending=acquired;pending.key=s.key;pending.target=plan.target;pending.node=plan.node;pending.until_time=plan.until_time
+        pending=acquired;pending.mark_valid=plan.selection_basis=='player_mark' and s.marked.valid or nil;pending.key=s.key;pending.target=plan.target;pending.node=plan.node;pending.until_time=plan.until_time
         pending.deadline_address=s.deadline_address;pending.deadline_after=due
         M.active_request=true;M.active_ranking=plan.ranking;M.active_target=plan.selected or 0;M.active_reason=plan.reason
         M.active_basis=plan.selection_basis

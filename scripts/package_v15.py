@@ -84,6 +84,7 @@ def build_variant(show_hud):
     report={'variant':variant,'loader_channel':'v15','base_zip_sha256':verified_report['zip_sha256'],'core_build':'experimental-'+VERSION,
         'module':MODULE,'implementation':IMPL,'entry_sha256':sha(entry),'core_resource_sha256':sha(core),
         'core_resource_unchanged':True,'core_sources':base_report['sources'],
+        'supported_layout_ids':base_report['supported_layout_ids'],
         'hud':base_report['hud'],'hud_enabled':show_hud,'target_policy':base_report['target_policy'],
         'requires':'Bingus Shared Loader v15 or newer / API 1',
         'tested_loader_zip_sha256':LOADER_SHA,'startup_tests':results,

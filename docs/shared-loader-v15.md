@@ -1,6 +1,6 @@
 # v15独立模块包与迁移
 
-适用版本：0.7.4；更新于2026-09-19。名称标注“需要额外安装加载器”，HUD/No HUD均不内置加载器，也不提供Wwise或boot资源。单独安装[官方Bingus Shared Loader v15](https://github.com/CowboyBingus/BingusSharedLoader/releases/tag/v15)，由其自动发现Rover。六包名称见[多渠道说明](packaging-channels.md)。
+适用版本：0.7.6；更新于2026-09-19。名称标注“需要额外安装加载器”，HUD/No HUD均不内置加载器，也不提供Wwise或boot资源。单独安装[官方Bingus Shared Loader v15](https://github.com/CowboyBingus/BingusSharedLoader/releases/tag/v15)，由其自动发现Rover。六包名称见[多渠道说明](packaging-channels.md)。
 
 ## 从旧版更新
 
@@ -24,7 +24,7 @@
 
 官方日志：`%LOCALAPPDATA%/CowboyBingus/Helldivers2/Logs/BingusSharedLoader.log`。检查本次发现记录及`mods/retrox/rover_fire_spread: loaded`。
 
-本体日志：`%LOCALAPPDATA%/RoverFireSpread.log`，build为`experimental-0.7.4`。核对当前PID、时间、status和持续增加的samples。loaded只表示入口require返回；本体可能在初始化检查中受控停止，不能据此当作转火已运行。No HUD成功运行显示`hud_enabled=false`、`hud_status=disabled`。
+本体日志：`%LOCALAPPDATA%/RoverFireSpread.log`，build为`experimental-0.7.6`。核对当前PID、时间、status和持续增加的samples。loaded只表示入口require返回；本体可能在初始化检查中受控停止，不能据此当作转火已运行。No HUD成功运行显示`hud_enabled=false`、`hud_status=disabled`。
 
 本包不执行Rover旧Wwise桥，不会更新`RoverFireSpread-startup.log`。磁盘旧文件不能作为此包加载证据。
 
