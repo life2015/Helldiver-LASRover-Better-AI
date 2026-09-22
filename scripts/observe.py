@@ -8,6 +8,7 @@ import ctypes as C
 import hashlib
 import json
 import os
+import struct
 import sys
 import time
 from pathlib import Path
@@ -97,16 +98,18 @@ def main():
             function sample()
                 local ok,why=pcall(CONTROL.poll)
                 if not ok then return 'error\t'..tostring(why)end
-                local s=LAST_SNAPSHOT;local rows={};local distances={}
+                local s=LAST_SNAPSHOT;local rows={};local distances={};local slots={}
                 if s then for _,c in ipairs(s.candidates)do
                     rows[#rows+1]=string.format('%d:%d',c.id,c.eligible and 1 or 0)
                     distances[#distances+1]=string.format('%d:%s',c.id,c.distance2 and string.format('%.3f',math.sqrt(c.distance2)) or 'unknown')
+                    local identity=(c.identity or ''):gsub('.',function(x)return string.format('%02x',x:byte())end)
+                    slots[#slots+1]=string.format('%d:%d:%.0f:%s',c.id,c.eligible and 1 or 0,c.address-76,identity)
                 end end
                 return table.concat({CONTROL.status or '',CONTROL.id or 0,CONTROL.target or 0,
                     CONTROL.node or 0,CONTROL.eligible or 0,CONTROL.would_rotate or 0,table.concat(rows,','),
                     s and s.distance_available and '1' or '0',table.concat(distances,','),CONTROL.planned_target or 0,
                     CONTROL.ranking or '',CONTROL.history_count or 0,CONTROL.decision or '',
-                    CONTROL.no_attack_elapsed or 0,CONTROL.marked_target or 0,CONTROL.marker_status or '',CONTROL.selection_basis or ''},'\t')
+                    CONTROL.no_attack_elapsed or 0,CONTROL.marked_target or 0,CONTROL.marker_status or '',CONTROL.selection_basis or '',table.concat(slots,',')},'\t')
             end
         ''')
         folder = ROOT.parent / 'research/artifacts'
@@ -120,8 +123,27 @@ def main():
             while time.perf_counter() - start < args.seconds:
                 trace.clear(); read_errors.clear()
                 now = time.perf_counter() - start
+                wall_time = time.time()
                 fields = lua.run(f'HOST_NOW={now!r};return sample()').decode().split('\t')
-                row = {'time': now, 'status': fields[0], 'fields': fields[1:], 'read_errors': read_errors.copy()}
+                row = {'time': now, 'wall_time': wall_time, 'status': fields[0], 'fields': fields[1:], 'read_errors': read_errors.copy()}
+                # Decode the perception block already read by snapshot.lua. No extra
+                # memory reads, and no mutation of native eligibility for diagnosis.
+                row['candidate_details'] = []
+                if len(fields)>17 and fields[17]:
+                    blocks=[(r['address'],bytes.fromhex(r['hex'])) for r in trace if len(r['hex'])==0x13f8*2]
+                    for slot in fields[17].split(','):
+                        target,eligible,address,identity=slot.split(':');address=int(address)
+                        detail={'id':int(target),'eligible':eligible=='1','slot_address':address,'identity':identity}
+                        for start_address,data in blocks:
+                            off=address-start_address
+                            if 0<=off and off+80<=len(data):
+                                detail.update(raw_id=struct.unpack_from('<I',data,off)[0],
+                                    xyz=struct.unpack_from('<fff',data,off+4),
+                                    score=struct.unpack_from('<f',data,off+68)[0],
+                                    flags=struct.unpack_from('<I',data,off+72)[0],
+                                    faction_mask=struct.unpack_from('<I',data,off+76)[0])
+                                break
+                        row['candidate_details'].append(detail)
                 try:
                     row['mod_log'] = dict(line.split('=', 1) for line in runtime_log.read_text(encoding='utf-8').splitlines() if '=' in line)
                     row['mod_log_mtime'] = runtime_log.stat().st_mtime

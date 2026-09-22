@@ -10,7 +10,7 @@ return function(create_api,snapshot,policy,leases,controller,build,hud)
         pcall(function()
             local dir=os.getenv('LOCALAPPDATA');if not dir then return end
             local f=io.open(dir..'/RoverFireSpread.log','w');if not f then return end
-            f:write('Rover Fire Spread prototype 0.7.10\nbuild_id=experimental-0.7.10\nmode='..state.mode..'\nstatus='..tostring(state.status)..'\n')
+            f:write('Rover Fire Spread prototype 0.7.14\nbuild_id=experimental-0.7.14\nmode='..state.mode..'\nstatus='..tostring(state.status)..'\n')
             f:write('process_id='..tostring(api and api.pid and api.pid() or 0)..'\n')
             f:write('hud_enabled='..tostring(state.hud_enabled)..'\n')
             for _,key in ipairs({'compatibility','layout_id','game_sha256','exe_sha256','hud_status','hud_error'})do
@@ -20,6 +20,7 @@ return function(create_api,snapshot,policy,leases,controller,build,hud)
                 for _,key in ipairs({'samples','requests','rotations','would_rotate','id','target','node','candidates','eligible',
                     'history_count','history_limit','history_seconds','distance_available','planned_target','planned_distance','ranking','selection_basis','marked_target','marker_status',
                     'decision','target_synced','active_request','active_ranking','active_target','active_reason','no_attack_elapsed','lock_elapsed','lock_limit',
+                    'marked_current','attack_elapsed','attack_limit','no_attack_limit','marker_reason','marker_notice','marked_grace_remaining','mark_wait_reason',
                     'last_request_at','last_request_finished_at','last_request_ranking','last_request_target','last_request_reason','active_basis','last_request_basis','cleanup_pending'})do
                     local value=control[key];if value==nil then value=0 end
                     f:write(key..'='..tostring(value)..'\n')

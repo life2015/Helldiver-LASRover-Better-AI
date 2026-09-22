@@ -1,10 +1,12 @@
 -- Optional retained GUI. Drawing failures never stop the targeting controller.
 -- Font/material setup follows KnowYourConstellation's native body-font panel.
 local M={status_hold_seconds=0.5}
-local basis_labels={player_mark='your marked enemy',previous_target='adjacent target',near_rover='near Rover (30m)',rover_fallback='nearest Rover',timeout_rover='nearest Rover'}
+local basis_labels={player_mark='your marked enemy',previous_target='adjacent target',near_rover='near Rover (20m)',rover_fallback='nearest Rover',timeout_rover='nearest Rover'}
 local reasons={attack_window='attack window',no_attack_window='no attack; waiting 1.5s',no_alternative='no other target',tracking='tracking / aiming',
     mark_changed='mark changed; retry',retry_delay='retry delay',request_finished='request released',precondition_changed='data changed; retry',
     no_writes='no change needed',diagnostic='diagnostic only'}
+local mark_wait_labels={recent='recent target; waiting',retry='request cooldown',native_state='waiting for native targeting',
+    identity='waiting for target identity',ready='requesting marked target'}
 function M.model(state,c,now)
     c=c or {}
     local age=c.last_request_at and now-c.last_request_at
@@ -14,6 +16,8 @@ function M.model(state,c,now)
     local held=same_context and released_age and released_age>=0 and released_age<M.status_hold_seconds
     local marked=c.current_key~=nil and c.marker_status=='eligible'
         and type(c.marked_target)=='number' and c.marked_target>0
+    local pending_mark=c.current_key~=nil and c.marker_status=='not_eligible'
+        and type(c.marked_target)=='number' and c.marked_target>0
     local title,tone,detail='ROVER | WAITING','neutral','waiting for local laser Rover'
     if state.stopped or c.stopped then
         title='ROVER | STOPPED';tone='error'
@@ -22,13 +26,29 @@ function M.model(state,c,now)
         if c.active_basis=='player_mark' then title='ROVER | MOD: MARKED';tone='good'
         elseif c.active_ranking=='nearest' then title='ROVER | MOD: NEAREST';tone='good'
         else title='ROVER | MOD: NATIVE PICK';tone='partial' end
-        if c.active_reason=='lock_timeout' then detail='no attack 1.5s - reselecting'
-        elseif c.active_reason=='lock_max_duration' then detail='lock 1.5s - reselecting'
+        if c.active_reason=='lock_timeout' then detail=string.format('no attack %gs - reselecting',c.no_attack_limit or 1.5)
+        elseif c.active_reason=='lock_max_duration' then detail=string.format('lock %gs - reselecting',c.lock_limit or 1.5)
         else detail=basis_labels[c.active_basis] and 'Selecting: '..basis_labels[c.active_basis] or 'rotation request active' end
+    elseif pending_mark then
+        title='ROVER | MARKED: WAITING';tone='partial'
+        local labels={score='score unavailable',missing='outside candidate list',identity='identity unavailable',
+            flags='native flags reject',faction='candidate filtered',ineligible='not selectable'}
+        local why=labels[c.marker_reason] or 'not selectable'
+        if (c.marked_grace_remaining or 0)>0 then
+            detail=string.format('Marked: %d | grace %.1fs',c.marked_target,c.marked_grace_remaining)
+        else detail=string.format('Marked: %d | %s',c.marked_target,why) end
     elseif marked then
         title='ROVER | MARKED';tone='good'
         local current=c.target_synced and c.target==c.marked_target
-        detail=string.format('Marked: %d | %s',c.marked_target,current and 'current lock' or 'waiting for rotation')
+        local progress=current and string.format('attack %.1f/%gs',c.attack_elapsed or 0,c.attack_limit or 4) or 'waiting for rotation'
+        if c.marked_current and c.decision=='no_attack_window' then
+            progress=string.format('no attack %.1f/%gs',c.no_attack_elapsed or 0,c.no_attack_limit or 3)
+        elseif not current and mark_wait_labels[c.mark_wait_reason] then
+            progress=mark_wait_labels[c.mark_wait_reason]
+        end
+        detail=string.format('Marked: %d | %s',c.marked_target,progress)
+    elseif c.marker_notice then
+        title='ROVER | NATIVE';detail=c.marker_notice
     elseif held and (c.last_request_ranking=='nearest' or c.last_request_ranking=='native_distance_unavailable') then
         if c.last_request_basis=='player_mark' then title='ROVER | MOD: MARKED (last)';tone='good'
         elseif c.last_request_ranking=='nearest' then title='ROVER | MOD: NEAREST (last)';tone='good'

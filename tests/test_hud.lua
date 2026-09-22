@@ -4,11 +4,11 @@ local function test(name,fn)fn();passed=passed+1;print('PASS '..name)end
 test('HUD explains adjacent selection and close threat priority including the retained request',function()
     local c={active_request=true,active_ranking='nearest',active_basis='previous_target',active_target=2}
     assert(H.model({},c,1).lines[2]=='Selecting: adjacent target')
-    c.active_basis='near_rover';assert(H.model({},c,1).lines[2]=='Selecting: near Rover (30m)')
+    c.active_basis='near_rover';assert(H.model({},c,1).lines[2]=='Selecting: near Rover (20m)')
     c.active_request=false;c.last_request_at=1;c.current_key='a';c.last_request_key='a'
     c.last_request_basis='near_rover';c.last_request_ranking='nearest';c.last_request_target=2
     local m=H.model({},c,1.5)
-    assert(m.lines[3]:find('near Rover (30m)',1,true) and m.lines[5]:find('2 (last)',1,true))
+    assert(m.lines[3]:find('near Rover (20m)',1,true) and m.lines[5]:find('2 (last)',1,true))
 end)
 test('HUD differentiates mod nearest and filtered native selection',function()
     local c={active_request=true,active_ranking='nearest'}
@@ -218,5 +218,31 @@ test('marked priority has distinct active and retained HUD labels',function()
     c.active_request=false;c.current_key='a';c.last_request_key='a';c.last_request_at=1;c.last_request_finished_at=1
     c.last_request_ranking='nearest';c.last_request_basis='player_mark';c.last_request_target=22
     assert(H.model({},c,1.2).lines[1]=='ROVER | MOD: MARKED (last)')
+end)
+test('marked dwell progress and timeout labels reflect the active thresholds',function()
+    local c={current_key='a',marker_status='eligible',marked_target=22,target=22,target_synced=true,
+        marked_current=true,attack_elapsed=2,attack_limit=4,no_attack_elapsed=2,no_attack_limit=3,lock_limit=5}
+    local m=H.model({},c,2);assert(m.lines[1]=='ROVER | MARKED' and m.lines[2]=='Marked: 22 | attack 2.0/4s')
+    c.decision='no_attack_window';assert(H.model({},c,2).lines[2]=='Marked: 22 | no attack 2.0/3s')
+    c.active_request=true;c.active_ranking='nearest';c.active_reason='lock_timeout'
+    assert(H.model({},c,3).lines[2]=='no attack 3s - reselecting')
+    c.active_reason='lock_max_duration';assert(H.model({},c,5).lines[2]=='lock 5s - reselecting')
+end)
+test('HUD distinguishes score grace waiting candidate loss and expired marker',function()
+    local c={current_key='a',marker_status='not_eligible',marked_target=22,marker_reason='score',marked_grace_remaining=1.25}
+    local m=H.model({},c,1);assert(m.lines[1]=='ROVER | MARKED: WAITING' and m.lines[2]=='Marked: 22 | grace 1.3s' and m.tone=='partial')
+    c.marked_grace_remaining=0;assert(H.model({},c,1).lines[2]=='Marked: 22 | score unavailable')
+    c.marker_reason='missing';assert(H.model({},c,1).lines[2]=='Marked: 22 | outside candidate list')
+    c.marked_target=0;c.marker_status='expired';c.marker_notice='mark expired'
+    assert(H.model({},c,1).lines[2]=='mark expired')
+    assert(H.model({stopped=true},c,1).lines[1]=='ROVER | STOPPED')
+end)
+test('eligible marked waiting distinguishes Recent cooldown and native targeting state',function()
+    local c={current_key='a',marker_status='eligible',marked_target=22,target=11,mark_wait_reason='recent'}
+    assert(H.model({},c,1).lines[2]=='Marked: 22 | recent target; waiting')
+    c.mark_wait_reason='retry';assert(H.model({},c,1).lines[2]=='Marked: 22 | request cooldown')
+    c.mark_wait_reason='native_state';assert(H.model({},c,1).lines[2]=='Marked: 22 | waiting for native targeting')
+    c.active_request=true;c.active_basis='player_mark';c.active_reason='marked_priority'
+    assert(H.model({},c,1).lines[1]=='ROVER | MOD: MARKED')
 end)
 return tostring(passed)..' HUD tests passed'

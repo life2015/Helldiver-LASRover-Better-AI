@@ -108,4 +108,33 @@ test('unfocused mark still expires cancels and rejects reused identity',function
         assert(not mark.valid(),change)
     end
 end)
+test('live ping survives score-only rejection as observation but never grants selection',function()
+    local a,p,r,c=fixture();local mark,status,obs=read(a,c)
+    assert(mark and obs.id==22 and obs.identity=='enemy22' and obs.remaining==7)
+    local token=obs.token;c[1].eligible=false;c[1].eligibility_reason='score'
+    mark,status,obs=read(a,c)
+    assert(not mark and status=='not_eligible' and obs.reason=='score' and obs.token==token)
+    c[1].valid=function()return false end
+    mark,status,obs=read(a,c);assert(not mark and status=='changed' and not obs)
+end)
+test('missing candidate observation exposes ID only and cancellation clears it',function()
+    local a,p,r,c=fixture();local mark,status,obs=read(a,{})
+    assert(not mark and obs.id==22 and not obs.identity and obs.reason=='missing')
+    p(2008,word(1));mark,status,obs=read(a,{})
+    assert(not mark and not obs and status=='none')
+end)
+test('expired marker reports expiry without retaining an observation',function()
+    local a,p,r,c=fixture();r(0,22,11,1,8)
+    local mark,status,obs=read(a,c);assert(not mark and status=='expired' and not obs)
+end)
+test('observation prefers eligible duplicate and retains screen-independent token',function()
+    local a,p,r,c=fixture();table.insert(c,1,{id=22,eligible=false,identity='enemy22',eligibility_reason='score',valid=function()return true end})
+    local m,_,obs=read(a,c);assert(m and obs.reason=='eligible');local token=obs.token
+    p(2044,word(0x200));local _,_,next_obs=read(a,c);assert(next_obs.token==token)
+end)
+test('request-time candidate read error cancels priority without escaping the validity guard',function()
+    local a,p,r,c=fixture();local mark=assert(read(a,c))
+    c[1].valid=function()error('read failed')end
+    assert(mark.valid()==false)
+end)
 return tostring(passed)..' marker tests passed'

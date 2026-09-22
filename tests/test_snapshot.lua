@@ -157,4 +157,18 @@ end)
 test('mission exit yields a waiting state',function()
     word(mode+0x40,0);local s,why=S.read(api,game);assert(not s and why=='waiting_for_mission')
 end)
+test('snapshot distinguishes score-only failure from flags and faction without widening eligibility',function()
+    word(mode+0x40,1);local a=pr+0x318
+    put(a+68,ffi.string(ffi.new('float[1]',-1),4))
+    local c=S.read(api,game).candidates[1];assert(not c.eligible and c.eligibility_reason=='score')
+    word(a+76,0);assert(S.read(api,game).candidates[1].eligibility_reason=='faction')
+    word(a+72,0);assert(S.read(api,game).candidates[1].eligibility_reason=='flags')
+    word(a+72,1);word(a+76,4);put(a+68,ffi.string(ffi.new('float[1]',1),4))
+    assert(S.read(api,game).candidates[1].eligible)
+end)
+test('snapshot keeps an unselectable marker observation separate from actionable mark',function()
+    api.markers=function()return nil,'not_eligible',{id=202,reason='score'}end
+    local s=S.read(api,game);assert(not s.marked and s.marker_observation.id==202 and s.marker_status=='not_eligible')
+    api.markers=nil
+end)
 return tostring(passed)..' snapshot tests passed'

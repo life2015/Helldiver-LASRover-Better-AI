@@ -159,7 +159,10 @@ local function read_snapshot(api,game)
             position={x,y,z}
             if origin then distance2=(x-origin[1])^2+(y-origin[2])^2+(z-origin[3])^2 end
         end
+        local eligibility_reason=not identity and 'identity' or bit.band(flags,1)==0 and 'flags'
+            or bit.band(mask,allowed_mask)==0 and 'faction' or score<=0 and 'score' or 'eligible'
         candidates[#candidates+1]={id=target,identity=identity,position=position,distance2=distance2,mask=raw:sub(77,80),address=address,
+            eligibility_reason=eligibility_reason,
             eligible=identity~=nil and bit.band(flags,1)~=0 and bit.band(mask,allowed_mask)~=0 and score>0,
             valid=function()
                 if not identity then return false end
@@ -178,15 +181,15 @@ local function read_snapshot(api,game)
     end
     -- Native function 87f9a0 skips empty special entries using the +0x48 marker.
     for _,off in ipairs({0x1228,0x1278,0x12c8}) do if u(data,off+0x48)~=0 then candidate(off) end end
-    local marked,marker_status
-    if api.markers then marked,marker_status=api.markers(game,aid,candidates) end
+    local marked,marker_status,marker_observation
+    if api.markers then marked,marker_status,marker_observation=api.markers(game,aid,candidates) end
     local clock=root(0x276c068);local now=tick(read(clock+24,8))
     local deadline=tick(behavior:sub(153,160))
     assert(now>0 and now<9007199254740991 and deadline<9007199254740991,'clock bound')
     local target=u(behavior,24);local node=u(behavior,8)
     return {key=avatar:sub(1,20)..pack:sub(1,20)..ent:sub(1,20),id=id,target=target,node=node,
         synced=target~=0 and u(aim)==target and behavior:byte(121)==1 and bit.band(u(behavior,96),1)~=0,
-        marked=marked,marker_status=marker_status or 'unavailable',candidates=candidates,distance_available=origin~=nil,now_native=now,deadline=behavior:sub(153,160),deadline_value=deadline,deadline_address=ba+152,
+        marked=marked,marker_status=marker_status or 'unavailable',marker_observation=marker_observation,candidates=candidates,distance_available=origin~=nil,now_native=now,deadline=behavior:sub(153,160),deadline_value=deadline,deadline_address=ba+152,
         guards=guards,valid=function()return M.matches(api,behavior_guards)end,
         transition={{address=ba,bytes=behavior:sub(1,4)},{address=ba+8,bytes=behavior:sub(9,12)},
             {address=ba+24,bytes=behavior:sub(25,28)},

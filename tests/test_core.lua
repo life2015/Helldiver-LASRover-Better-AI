@@ -261,21 +261,21 @@ local function located(points)
     return s
 end
 test('normal rotation follows adjacent enemies instead of nearest drone range',function()
-    local s=located({{30,0,0},{32,0,0},{16,0,0}})
+    local s=located({{20,0,0},{22,0,0},{16,0,0}})
     local p=due({},s,0)
     assert(p.selected==2 and p.selection_basis=='previous_target' and p.distance2==4)
 end)
-test('far target yields to a candidate within thirty meters',function()
-    local s=located({{40,0,0},{41,0,0},{30,0,0}})
+test('far target yields to a candidate within twenty meters',function()
+    local s=located({{40,0,0},{41,0,0},{20,0,0}})
     local p=due({},s,0)
     assert(p.selected==3 and p.selection_basis=='near_rover' and p.blocked[2])
 end)
-test('a target exactly at thirty meters keeps adjacent selection across the boundary',function()
-    local s=located({{30,0,0},{31,0,0},{1,0,0}})
+test('a target exactly at twenty meters keeps adjacent selection across the boundary',function()
+    local s=located({{20,0,0},{21,0,0},{1,0,0}})
     local p=due({},s,0);assert(p.selected==2 and p.selection_basis=='previous_target')
 end)
-test('a target just outside thirty meters switches to the near pool',function()
-    local s=located({{30.001,0,0},{30.002,0,0},{1,0,0}})
+test('a target just outside twenty meters switches to the near pool',function()
+    local s=located({{20.001,0,0},{20.002,0,0},{1,0,0}})
     assert(due({},s,0).selected==3)
 end)
 test('returning to close threats outranks the recent exclusion',function()
@@ -424,16 +424,78 @@ test('marked selection works without distance and never widens eligibility',func
     s.candidates[3].eligible=false;assert(due({},s,0).selection_basis~='player_mark')
     s.candidates[3].eligible=true;s.marked.identity='reused';assert(due({},s,0).selection_basis~='player_mark')
 end)
-test('marked current target still rotates after normal window',function()
-    local s=row(1);s.marked={id=1,identity='entity-1'};local p=due({},s,0);assert(p.blocked[1] and p.selection_basis~='player_mark')
+test('marked current target receives four seconds before normal rotation',function()
+    local s=row(1);s.marked={id=1,identity='entity-1'};local st={}
+    for i=0,63 do assert(not P.plan(st,s,i/16))end
+    local p=P.plan(st,s,4);assert(p.reason=='attack_window' and p.blocked[1] and p.selection_basis~='player_mark')
+    assert(st.attack_limit==4 and st.no_attack_limit==3 and st.lock_limit==5)
+end)
+
+test('marked no-attack timeout waits three seconds then chooses nearest alternative',function()
+    local s=located({{10,0,0},{8,0,0},{2,0,0}});s.node=6;s.synced=false
+    s.marked={id=1,identity='entity-1'};local st={}
+    for i=0,47 do assert(not P.plan(st,s,i/16))end
+    local p=P.plan(st,s,3);assert(p.reason=='lock_timeout' and p.selected==3 and p.selection_basis=='timeout_rover')
+end)
+
+test('attack toggles and repeated marking cannot postpone the five-second watchdog',function()
+    local s=row(1);local st={}
+    for i=0,79 do
+        s.marked={id=1,identity='entity-1'};s.node=i%4<2 and 6 or 7;s.synced=s.node==7
+        assert(not P.plan(st,s,i/16))
+    end
+    s.node=6;s.synced=false
+    local p=P.plan(st,s,5);assert(p.reason=='lock_max_duration' and st.lock_elapsed==5)
+end)
+
+test('canceled changed ineligible or identity-mismatched marks immediately restore normal limits',function()
+    for _,change in ipairs({'cancel','other','identity','ineligible'})do
+        local s=row(1);s.marked={id=1,identity='entity-1'};local st={}
+        for i=0,31 do assert(not P.plan(st,s,i/16))end
+        if change=='cancel' then s.marked=nil elseif change=='other' then s.marked={id=2,identity='entity-2'}
+        elseif change=='identity' then s.marked.identity='reused' else s.candidates[1].eligible=false end
+        local p=P.plan(st,s,2);assert(p and p.reason==(change=='other' and 'marked_priority' or 'attack_window'),change)
+        assert(not st.marked_current and st.attack_limit==.4 and st.no_attack_limit==1.5 and st.lock_limit==1.5)
+    end
+end)
+
+test('new marked target starts a fresh four-second attack window',function()
+    local s=row(1);s.marked={id=1,identity='entity-1'};local st={}
+    for i=0,47 do assert(not P.plan(st,s,i/16))end
+    s.target=2;s.marked={id=2,identity='entity-2'}
+    for i=48,111 do assert(not P.plan(st,s,i/16))end
+    assert(P.plan(st,s,7).reason=='attack_window')
+end)
+
+test('gaps pause and reused current identity discard marked attack progress',function()
+    for _,change in ipairs({'gap','pause','identity'})do
+        local s=row(1);s.marked={id=1,identity='entity-1'};local st={}
+        for i=0,47 do assert(not P.plan(st,s,i/16))end
+        local start=3
+        if change=='gap' then start=10 elseif change=='pause' then P.pause(st,3)
+        else s.candidates[1].identity='new-entity';s.marked.identity='new-entity' end
+        for i=0,63 do assert(not P.plan(st,s,start+i/16),change)end
+        assert(P.plan(st,s,start+4).reason=='attack_window')
+    end
+end)
+
+test('controller applies marked timers without extending the actual write lease',function()
+    local c,s,m,step,n=controller_fixture(true);s.marked={id=1,identity='entity-1',valid=function()return true end}
+    for i=0,63 do step(i/16);assert(c.requests==0 and n()==0)end
+    assert(c.marked_current and c.attack_limit==4 and c.no_attack_limit==3 and c.lock_limit==5)
+    step(4);assert(c.requests==1 and c.active_reason=='attack_window' and m[10]=='\0\0\0\0')
+    step(4.25);assert(not c.active_request and m[10]=='AAAA' and m[20]=='BBBBBBBB')
+    s.unavailable=true;step(4.5);assert(not c.marked_current and c.attack_elapsed==0 and c.lock_limit==1.5)
 end)
 test('Recent suppresses immediate return to the marked target',function()
     local st={};due(st,row(3,{3}),0);local s=located({{5,0,0},{6,0,0},{10,0,0}});s.marked={id=3,identity='entity-3'}
     assert(due(st,s,.5).selected==2);assert(due(st,s,2).selected==3)
 end)
-test('timeout escape stays nearest instead of preferring a distant mark',function()
-    local s=located({{12,0,0},{13,0,0},{2,0,0}});s.marked={id=2,identity='entity-2'}
-    local p=stalled(s);assert(p.selected==3 and p.selection_basis=='timeout_rover')
+test('eligible new mark takes priority when an unrelated old target reaches timeout',function()
+    local s=located({{12,0,0},{13,0,0},{2,0,0}});local st={};s.node=6
+    for i=0,5 do assert(not P.plan(st,s,i*.25))end
+    s.marked={id=2,identity='entity-2'}
+    local p=P.plan(st,s,1.5);assert(p.selected==2 and p.selection_basis=='player_mark' and p.reason=='marked_priority')
 end)
 test('marker canceled before transaction cannot initiate writes',function()
     local c,s,m,step,n=controller_fixture(true);s.marked={id=2,identity='entity-2',valid=function()return false end}
@@ -442,7 +504,135 @@ end)
 test('canceling an active marked request restores normal candidates',function()
     local c,s,m,step=controller_fixture(true);local live=true
     s.marked={id=2,identity='entity-2',valid=function()return live end}
-    step(0);step(.15);step(.3);step(.45);assert(c.requests==1 and c.active_basis=='player_mark')
-    live=false;step(.51);assert(not c.active_request and m[10]=='AAAA')
+    step(0);assert(c.requests==1 and c.active_basis=='player_mark')
+    live=false;step(.0625);assert(not c.active_request and m[10]=='AAAA')
+end)
+local function mark_state(s,score)
+    s.marker_observation={id=1,identity='entity-1',token='ping-A',elapsed=1,remaining=7,reason=score and 'score' or 'eligible'}
+    s.candidates[1].eligible=not score;s.candidates[1].eligibility_reason=score and 'score' or 'eligible'
+    s.marked=not score and {id=1,identity='entity-1',valid=function()return true end} or nil
+    s.marker_status=score and 'not_eligible' or 'eligible'
+end
+
+test('score outage preserves current marked dwell for exactly 1.5 seconds',function()
+    local s=row(1);local st={};mark_state(s,false)
+    for i=0,8 do assert(not P.plan(st,s,i/8))end
+    mark_state(s,true)
+    for i=9,19 do assert(not P.plan(st,s,i/8));assert(st.marked_current and st.attack_limit==4)end
+    local p=P.plan(st,s,2.5);assert(p and p.reason=='attack_window' and not st.marked_current and not st.mark_cache)
+end)
+
+test('score recovery continues attack progress without restarting the four-second window',function()
+    local s=row(1);local st={};mark_state(s,false)
+    for i=0,31 do
+        mark_state(s,i>=8 and i<16 or i>=24);assert(not P.plan(st,s,i/8))
+    end
+    assert(P.plan(st,s,4).reason=='attack_window');assert(st.elapsed==4 and st.marked_grace_remaining>0)
+end)
+
+test('grace never grants a new marked selection or accepts never-eligible targets',function()
+    local s=row(1);mark_state(s,true);local st={}
+    assert(due(st,s,0));assert(not st.marked_current)
+    s.target=2;s.candidates[2].distance2=4;s.candidates[3].distance2=9
+    local p=due({},s,0);assert(p.selected==3 and p.selection_basis~='player_mark' and not p.allowed[1])
+end)
+
+test('cancellation replacement identity loss and non-score failures immediately cancel grace',function()
+    for _,change in ipairs({'cancel','replace','identity','flags','faction','missing','token','rewind'})do
+        local s=row(1);local st={};mark_state(s,false)
+        for i=0,8 do P.plan(st,s,i/8)end
+        mark_state(s,true)
+        if change=='cancel' then s.marker_observation=nil
+        elseif change=='replace' then s.marker_observation.id=2
+        elseif change=='identity' then s.marker_observation.identity='new'
+        elseif change=='token' then s.marker_observation.token='ping-B'
+        elseif change=='rewind' then s.marker_observation.elapsed=0
+        elseif change=='missing' then table.remove(s.candidates,1)
+        else s.candidates[1].eligibility_reason=change;s.marker_observation.reason=change end
+        P.plan(st,s,1.125);assert(not st.marked_current and not st.mark_cache,change)
+    end
+end)
+
+test('grace does not extend three-second no-attack or five-second maximum-lock escape',function()
+    for _,mode in ipairs({'idle','toggle'})do
+        local s=row(1);local st={};local limit=mode=='idle' and 3 or 5
+        for i=0,limit*8 do
+            mark_state(s,i>limit*8-4)
+            s.node=mode=='idle' and 6 or (i%4<2 and 6 or 7);s.synced=s.node==7
+            local p=P.plan(st,s,i/8)
+            if i<limit*8 then assert(not p)else assert(p.reason==(mode=='idle' and 'lock_timeout' or 'lock_max_duration'))end
+        end
+    end
+end)
+
+test('pause gap context and target changes discard grace',function()
+    for _,change in ipairs({'pause','gap','key','target','reverse','node'})do
+        local s=row(1);local st={};mark_state(s,false);P.plan(st,s,1)
+        mark_state(s,true);local now=1.125
+        if change=='pause' then P.pause(st,1.05) elseif change=='gap' then now=2
+        elseif change=='key' then s.key='other' elseif change=='target' then s.target=2
+        elseif change=='reverse' then now=.9 else s.node=3 end
+        P.plan(st,s,now);assert(not st.marked_current and not st.mark_cache,change)
+    end
+end)
+
+test('controller reports score grace and ended mark without inventing an eligible selection',function()
+    local c,s,m,step=controller_fixture(true);mark_state(s,false)
+    for i=0,8 do step(i/8)end
+    mark_state(s,true);step(1.125)
+    assert(c.marked_target==1 and c.marker_reason=='score' and c.marked_grace_remaining>1 and c.requests==0)
+    s.marker_observation=nil;s.marker_status='expired';step(1.25)
+    assert(c.marked_target==0 and c.marker_notice=='mark expired' and c.marked_grace_remaining==0)
+    for i=11,23 do step(i/8)end
+    assert(c.marker_notice==nil)
+end)
+test('eligible mark triggers immediately before attack or aiming timers mature',function()
+    for _,node in ipairs({6,7})do
+        local s=located({{40,0,0},{2,0,0},{45,0,0}});s.node=node;s.synced=node==7
+        s.marked={id=3,identity='entity-3'};local st={}
+        local p=P.plan(st,s,0)
+        assert(p and p.reason=='marked_priority' and p.selected==3 and p.blocked[1] and p.blocked[2])
+        assert(st.elapsed==0 and st.idle_elapsed==0 and st.mark_wait_reason=='ready')
+    end
+end)
+test('immediate marking preserves real-time eligibility identity and native state gates',function()
+    for _,bad in ipairs({'score','missing','identity','node','zero_target','no_identity'})do
+        local s=row(1);local st={};s.marked={id=3,identity='entity-3'}
+        if bad=='score' then s.candidates[3].eligible=false
+        elseif bad=='missing' then table.remove(s.candidates,3)
+        elseif bad=='identity' then s.marked.identity='reused'
+        elseif bad=='node' then s.node=3
+        elseif bad=='zero_target' then s.target=0
+        else s.node=6;s.candidates[1].identity=nil end
+        assert(not P.plan(st,s,0),bad)
+    end
+end)
+test('marked priority retry waits half a second even after target or ping changes',function()
+    local s=row(1);s.marked={id=3,identity='entity-3'};local st={}
+    local p=P.plan(st,s,0);P.committed(st,p,0)
+    s.target=2
+    for _,t in ipairs({.125,.25,.375,.499})do
+        s.marker_observation={id=3,identity='entity-3',token=tostring(t)}
+        assert(not P.plan(st,s,t));assert(st.mark_wait_reason=='retry')
+    end
+    assert(P.plan(st,s,.5).reason=='marked_priority')
+end)
+test('immediate mark respects Recent after escaping an unattackable marked target',function()
+    local s=located({{10,0,0},{2,0,0},{9,0,0}});s.marked={id=1,identity='entity-1'}
+    s.node=6;s.synced=false;local st={}
+    for i=0,11 do assert(not P.plan(st,s,i*.25))end
+    local p=P.plan(st,s,3);assert(p.reason=='lock_timeout' and p.selected==2);P.committed(st,p,3)
+    s.target=2;s.node=7;s.synced=true
+    assert(not P.plan(st,s,3.125));assert(st.mark_wait_reason=='recent')
+    s.synced=false;s.node=6
+    for _,t in ipairs({3.25,3.5,3.75,3.999})do assert(not P.plan(st,s,t))end
+    p=P.plan(st,s,4);assert(p.reason=='marked_priority' and p.selected==1)
+end)
+test('controller submits immediate mark once and preserves lease and retry bounds',function()
+    local c,s,m,step=controller_fixture(true);s.marked={id=2,identity='entity-2',valid=function()return true end}
+    step(0);assert(c.requests==1 and c.active_reason=='marked_priority' and m[10]==string.rep('\0',4))
+    step(.25);assert(not c.active_request and m[10]=='AAAA' and m[20]=='BBBBBBBB')
+    step(.375);assert(c.requests==1 and c.mark_wait_reason=='retry')
+    step(.5);assert(c.requests==2 and c.active_basis=='player_mark')
 end)
 return tostring(passed)..' core tests passed'

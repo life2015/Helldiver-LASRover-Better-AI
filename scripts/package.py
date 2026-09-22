@@ -18,7 +18,7 @@ LOADER_SHA='4A95D7A056F0A9E01842420883059A380374092145B5D9EC807C14C8CA351568'
 CALLBACK_SHA='D07ED04A7F68D588F424D155AFD8F08B1BFC4D946C90FBC5BBBDCADE1EB69123'
 CALLBACK='core/wwise/lua/wwise_flow_callbacks'
 MODULE='mods/retrox/rover_fire_spread'
-VERSION='0.7.10'
+VERSION='0.7.14'
 PACKAGE_NAME='激光狗索敌优化'
 
 
@@ -86,19 +86,19 @@ def build_variant(original, show_hud, internal=False):
         'startup_sha256':sha((ROOT/'src/startup.lua').read_bytes()),
         'archive_sha256':sha(archive),'module':MODULE,
         'target_policy':{'attack_window_seconds':0.4,'history_limit':1,'history_seconds':1,'no_attack_seconds':1.5,'max_lock_seconds':1.5,
-            'near_radius':30,
-            'player_mark_priority':'build 25327279: newest active own enemy marker intersected with native eligible identity; on normal rotations outranks distance but respects Recent; timeout escape unchanged',
+            'near_radius':20,'marked_attack_window_seconds':4,'marked_no_attack_seconds':3,'marked_max_lock_seconds':5,'marked_grace_seconds':1.5,'marked_request_retry_seconds':0.5,
+            'player_mark_priority':'build 25327279: newest active own enemy marker intersected with native eligible identity; eligible marked alternatives trigger immediate requests in nodes 6/7 with an existing target, respecting Recent and retry limits; current marked enemy gets 4s attack / 3s no-attack / 5s maximum lock; timeouts on the current marked target escape to the nearest alternative',
             'preferred':'nearest to departing target among eligible targets absent from recent identity-aware history',
-            'near_override':'if departing target is beyond 30m from drone and eligible alternatives exist within 30m inclusive, restrict to near pool before Recent filtering and rank by drone range',
+            'near_override':'if departing target is beyond 20m from drone and eligible alternatives exist within 20m inclusive, restrict to near pool before Recent filtering and rank by drone range',
             'all_recent':'oldest observation in selected pool, then selected distance metric',
-            'lock_max_duration':'1.5s continuous identified same-target observation across node 6/7 attack-state toggles; reset after committed request or invalid observation; reselect nearest other eligible target ignoring Recent',
-            'lock_timeout':'same target without synchronized attack state on node 6/7; choose nearest other eligible target ignoring recent history',
+            'lock_max_duration':'5s for current valid marked identity, otherwise 1.5s, across node 6/7 attack-state toggles; reset after committed request or invalid observation; reselect nearest other eligible target ignoring Recent',
+            'lock_timeout':'3s for current valid marked identity, otherwise 1.5s, without synchronized attack state on node 6/7; choose nearest other eligible target ignoring recent history',
             'distance':'cached departing-target XYZ to candidate XYZ; drone range fallback if target-relative positions unavailable; native scoring if both unavailable. Timeout always uses drone range.',
             'distance_runtime_validated':False},
         'hud':{'enabled':show_hud,'runtime_validated':False,'font_layout':'registered layout font roots' if show_hud else None,'refresh_hz':10 if show_hud else 0,'placement':'top center' if show_hud else None},
         'compatibility_policy':'hash mismatch advisory; runtime signatures and layout checks required',
         'boot_replaced':False,'custom_dlls':0,'native_calls':0,'local_private_build':True})
-    description='Own active marked enemy receives priority at normal rotation boundaries on build 25327279; short bursts, Recent and timeout escape remain active. Laser Rover rotation: prefer enemies adjacent to the departing target; prioritize enemies within 30m of Rover when leaving a target beyond 30m. Recent: 1 record / 1 second. After 1.5s without synchronized attack state, or 1.5s on the same identified target across attack-state toggles, request nearest alternative. Normal 0.4s attack rotation takes priority. Includes Bingus Shared Loader v12 bridge. '
+    description='Own eligible marked enemy independently triggers a native retarget request on build 25327279, without waiting for the ordinary attack window. Requires native targeting state and an existing target; respects Recent and at least 0.5s between marked requests. Marked current target: 4s attack window, 3s no-attack timeout, 5s maximum lock. Other targets: 0.4s attack window and 1.5s timeouts. Cancellation and hard invalidation restore ordinary timing. Score-only outages of a verified current marked lock have up to 1.5s grace. Laser Rover rotation prefers adjacent enemies and prioritizes enemies within 20m when leaving a target beyond 20m. Recent: 1 record / 1 second. Timeout escape selects the nearest eligible alternative. Includes Bingus Shared Loader v12 bridge. '
     description+=('Live status HUD for testing. ' if show_hud else 'No HUD: no overlay creation or drawing. ')
     description+='Install only one variant. Gameplay stability still requires validation.'
     manifest={'Version':1,'Guid':'209a1d35-17ef-4c55-a163-616bf8f31861','Name':f'{PACKAGE_NAME} {VERSION} v12 内置加载器 ({label})',
